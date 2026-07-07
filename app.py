@@ -70,12 +70,18 @@ with tab1:
     
     if logs:
         df = pd.DataFrame(logs)
+        df['user'] = df['user'].str.strip() # ניקוי רווחים מהשמות
         df['date'] = pd.to_datetime(df['date'])
-        # יצירת העמודה המחושבת לגרף
+        
+        # חישוב זמן כולל
         df['total_time'] = df['hours'] + (df['minutes'] / 60)
+        
+        # מיון חובה לרציפות הקווים
+        df = df.sort_values(by=['user', 'date'])
         
         fig = px.line(df, x='date', y='total_time', color='user', 
                       markers=True, title="Screen Time by User (Total Hours)")
+        
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.write("No log data to display yet.")
