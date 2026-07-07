@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 import pandas as pd
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
@@ -11,6 +11,19 @@ if "user_name" not in st.session_state: st.session_state["user_name"] = None
 if "tracked_apps" not in st.session_state:
     st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook", "TikTok"]
 
+# --- CONNECTIONS & CACHING ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+@st.cache_data(ttl=600)
+def load_data():
+    return {
+        "logs": conn.read(worksheet="Logs", ttl=0),
+        "leaderboard": conn.read(worksheet="Leaderboard", ttl=0),
+        "blog": conn.read(worksheet="Blog", ttl=0),
+        "comments": conn.read(worksheet="Comments", ttl=0),
+        "challenges": conn.read(worksheet="Challenges", ttl=0)
+    }
+
 # --- LOGIN ---
 if not st.session_state["user_name"]:
     st.title("👋 Welcome to Screen Time Squad!")
@@ -21,26 +34,16 @@ if not st.session_state["user_name"]:
             st.rerun()
     st.stop()
 
-# --- CONNECTIONS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-logs_df = conn.read(worksheet="Logs", ttl=0)
-leaderboard_df = conn.read(worksheet="Leaderboard", ttl=0)
-blog_df = conn.read(worksheet="Blog", ttl=0)
-comments_df = conn.read(worksheet="Comments", ttl=0)
-# Add a safety wrapper for the initial read
-try:
-    logs_df = conn.read(worksheet="Logs", ttl=0)
-    leaderboard_df = conn.read(worksheet="Leaderboard", ttl=0)
-    blog_df = conn.read(worksheet="Blog", ttl=0)
-    comments_df = conn.read(worksheet="Comments", ttl=0)
-except Exception as e:
-    st.error("Google is busy! Please wait a minute and refresh the page.")
-    st.stop()
+# --- DATA LOADING ---
+data = load_data()
+logs_df, leaderboard_df = data["logs"], data["leaderboard"]
+blog_df, comments_df = data["blog"], data["comments"]
+challenges_df = data["challenges"]
 
-# --- TOP BAR: SQUAD MEMBERS ---
+# --- TOP BAR ---
 st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
 unique_users = sorted(logs_df["User"].unique().tolist()) if not logs_df.empty else []
-st.caption(f"Squad Members Online: {', '.join(unique_users) if unique_users else 'Be the first to join!'}")
+st.caption(f"Squad Members: {', '.join(unique_users) if unique_users else 'Be the first to join!'}")
 
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog"])
 
@@ -60,6 +63,7 @@ with tab1:
         new_row = {"Date": str(log_date), "User": st.session_state["user_name"], "Total Hours": total_hours}
         new_row.update(app_logs)
         conn.update(data=pd.concat([logs_df, pd.DataFrame([new_row])]), worksheet="Logs")
+        st.cache_data.clear()
         st.success("Log saved!")
         st.rerun()
 
@@ -73,15 +77,10 @@ with tab1:
 # --- TAB 2: CHALLENGES ---
 with tab2:
     st.header("🏆 Leaderboard")
-    # Read the challenge list from the sheet
-    challenges_df = conn.read(worksheet="Challenges", ttl=0)
-    
     if not leaderboard_df.empty:
         st.dataframe(leaderboard_df.sort_values(by="Points", ascending=False), use_container_width=True)
     
     st.subheader("✅ Daily Challenges")
-    
-    # 1. Challenge Selection
     with st.form("challenges_form"):
         selected_points = 0
         for _, row in challenges_df.iterrows():
@@ -95,23 +94,15 @@ with tab2:
             else:
                 leaderboard_df = pd.concat([leaderboard_df, pd.DataFrame([{"User": st.session_state['user_name'], "Points": selected_points}])], ignore_index=True)
             conn.update(data=leaderboard_df, worksheet="Leaderboard")
+            st.cache_data.clear()
             st.rerun()
 
-    # 2. Add/Remove Custom Challenges
     with st.expander("➕ Create New Challenge"):
         new_task = st.text_input("Task Description")
         new_pts = st.number_input("Points Reward", min_value=1, value=10)
-        
-        c1, c2 = st.columns(2)
-        if c1.button("Add Challenge"):
-            new_row = pd.DataFrame([{"Task": new_task, "Points": new_pts}])
-            conn.update(data=pd.concat([challenges_df, new_row]), worksheet="Challenges")
-            st.rerun()
-            
-        if c2.button("Delete Selected"):
-            # Logic to delete a challenge if you want to clean up the list
-            updated_challenges = challenges_df[challenges_df["Task"] != new_task]
-            conn.update(data=updated_challenges, worksheet="Challenges")
+        if st.button("Add Challenge"):
+            conn.update(data=pd.concat([challenges_df, pd.DataFrame([{"Task": new_task, "Points": new_pts}])]), worksheet="Challenges")
+            st.cache_data.clear()
             st.rerun()
 
 # --- TAB 3: BLOG & COMMENTS ---
@@ -122,6 +113,7 @@ with tab3:
         if st.form_submit_button("Post") and post:
             new_p = {"PostID": str(uuid.uuid4())[:8], "Timestamp": datetime.now().strftime("%H:%M"), "User": st.session_state["user_name"], "Post": post, "Likes": ""}
             conn.update(data=pd.concat([blog_df, pd.DataFrame([new_p])]), worksheet="Blog")
+            st.cache_data.clear()
             st.rerun()
 
     for _, row in blog_df.iloc[::-1].iterrows():
@@ -132,6 +124,7 @@ with tab3:
         if row["User"] == st.session_state["user_name"]:
             if st.button("🗑️ Delete Post", key=f"del_{pid}"):
                 conn.update(data=blog_df[blog_df["PostID"] != pid], worksheet="Blog")
+                st.cache_data.clear()
                 st.rerun()
 
         with st.expander("💬 Comments"):
@@ -142,5 +135,6 @@ with tab3:
                 new_c = st.text_input("Add comment...")
                 if st.form_submit_button("Reply") and new_c:
                     conn.update(data=pd.concat([comments_df, pd.DataFrame([{"PostID": pid, "User": st.session_state["user_name"], "Comment": new_c}])]), worksheet="Comments")
+                    st.cache_data.clear()
                     st.rerun()
         st.markdown("---")
