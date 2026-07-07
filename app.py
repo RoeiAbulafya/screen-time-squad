@@ -1,6 +1,5 @@
 import streamlit as st
-import uuid
-import pandas as pd  # FIXED: Added pandas import here!
+import pandas as pd 
 from datetime import datetime
 from supabase import create_client
 import plotly.express as px
@@ -19,15 +18,6 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# DIAGNOSTIC TOOL 
-try:
-    # This tries to fetch just one row to see if the table exists
-    test = supabase.table("logs").select("*").limit(1).execute()
-    st.write("Connection Successful!")
-except Exception as e:
-    st.error(f"DEBUG ERROR: {e}")
-    st.stop()
-    
 # --- LOGIN ---
 if not st.session_state["user_name"]:
     st.title("👋 Welcome to Screen Time Squad!")
@@ -50,51 +40,42 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blo
 with tab1:
     st.header("Log Your Time")
     log_date = st.date_input("Date")
-    hours = st.number_input("Total Hours:", min_value=0.0, max_value=24.0, step=0.01)
-    minutes = st.number_input("minutes:", min_value=0.0, max_value=24.0, step=0.01)
-    app_logs = {app: [st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.01),st.number_input(f"{app} (minutes):", min_value=0.0, max_value=24.0, step=0.01) ]
+    # קלט מפוצל כפי שביקשת
+    hours_input = st.number_input("Hours:", min_value=0, max_value=24, step=1)
+    minutes_input = st.number_input("Minutes:", min_value=0, max_value=59, step=1)
+    
+    app_logs = {app: st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.1) 
                 for app in st.session_state["tracked_apps"]}
 
-   if st.button("Save Daily Log"):
-        # 1. בדיקה אם כבר קיים לוג לאותו משתמש ותאריך
+    if st.button("Save Daily Log"):
         existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
 
         if existing_log:
-            # 2. אם קיים, נציג אזהרה ושאלת אישור
             st.warning("You have already logged data for this date.")
             if st.button("Yes, overwrite existing data"):
-                # מחיקת הרשומה הישנה
                 supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
-                # הכנסת החדשה
-                data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "total_hours": total_hours, "app_data": app_logs}
+                data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "hours": hours_input, "minutes": minutes_input, "app_data": app_logs}
                 supabase.table("logs").insert(data_to_insert).execute()
                 st.success("Log updated successfully!")
                 st.rerun()
-            else:
-                st.info("Update cancelled.")
         else:
-            # 3. אם לא קיים, פשוט נכניס
-            data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "total_hours": total_hours, "app_data": app_logs}
+            data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "hours": hours_input, "minutes": minutes_input, "app_data": app_logs}
             supabase.table("logs").insert(data_to_insert).execute()
             st.success("Log saved!")
             st.rerun()
 
     st.divider()
-    st.subheader("Squad Progress Chart")  
-    # 1. שליפת הנתונים מהטבלה
+    st.subheader("Squad Progress Chart") 
     logs = supabase.table("logs").select("*").execute().data
     
     if logs:
         df = pd.DataFrame(logs)
-        
-        # 2. המרת עמודת התאריך לפורמט זמן אם צריך
         df['date'] = pd.to_datetime(df['date'])
+        # יצירת העמודה המחושבת לגרף
+        df['total_time'] = df['hours'] + (df['minutes'] / 60)
         
-        # 3. יצירת הגרף ב-Plotly
-        # color='user' הוא מה שיגרום לכל משתמש לקבל קו בצבע שונה
-        fig = px.line(df, x='date', y='hours', color='user', 
-                      markers=True, title="Screen Time by User")
-        
+        fig = px.line(df, x='date', y='total_time', color='user', 
+                      markers=True, title="Screen Time by User (Total Hours)")
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.write("No log data to display yet.")
@@ -106,59 +87,40 @@ with tab2:
     if leaderboard:
         st.dataframe(pd.DataFrame(leaderboard), use_container_width=True)
     
-    st.subheader("✅ Daily Challenges")
-    challenges_data = supabase.table("challenges").select("*").execute().data
-   
-    # --- ADD NEW CHALLENGE SECTION ---
     with st.expander("➕ Suggest a New Challenge"):
         with st.form("add_challenge_form", clear_on_submit=True):
             new_task = st.text_input("What is the challenge?")
             new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
             if st.form_submit_button("Submit Suggestion"):
-                if new_task:
-                    supabase.table("challenges").insert({"task": new_task, "points": new_points}).execute()
-                    st.success(f"Added '{new_task}' to the list!")
-                    st.rerun()
-                else:
-                    st.error("Please enter a task name.")
+                supabase.table("challenges").insert({"task": new_task, "points": new_points}).execute()
+                st.rerun()
 
     st.subheader("✅ Daily Challenges")
-    
-    # Initialize session state for tracking previous selections
-    if "prev_selections" not in st.session_state:
-        st.session_state["prev_selections"] = {}
+    challenges_data = supabase.table("challenges").select("*").execute().data
+    if "prev_selections" not in st.session_state: st.session_state["prev_selections"] = {}
 
     with st.form("challenges_form"):
         current_selections = {}
         for ch in challenges_data:
-            # Create checkbox and store its state
             is_checked = st.checkbox(f"{ch['task']} ({ch['points']} pts)", key=f"ch_{ch['task']}")
             current_selections[ch['task']] = (is_checked, ch['points'])
         
         if st.form_submit_button("Update Score"):
             user = st.session_state['user_name']
+            point_change = sum(pts for task, (checked, pts) in current_selections.items() 
+                               if checked and not st.session_state["prev_selections"].get(task, False))
+            point_change -= sum(pts for task, (checked, pts) in current_selections.items() 
+                                if not checked and st.session_state["prev_selections"].get(task, False))
             
-            # Calculate net change (New - Old)
-            point_change = 0
-            for task, (is_checked, points) in current_selections.items():
-                was_checked = st.session_state["prev_selections"].get(task, False)
-                if is_checked and not was_checked:
-                    point_change += points      # Just checked
-                elif not is_checked and was_checked:
-                    point_change -= points      # Just unchecked (REDUCE POINTS)
-            
-            # Update Database
             curr = supabase.table("leaderboard").select("points").eq("user", user).execute().data
             if curr:
-                new_total = curr[0]['points'] + point_change
-                supabase.table("leaderboard").update({"points": new_total}).eq("user", user).execute()
+                supabase.table("leaderboard").update({"points": curr[0]['points'] + point_change}).eq("user", user).execute()
             else:
                 supabase.table("leaderboard").insert({"user": user, "points": point_change}).execute()
             
-            # Save new state and rerun
             st.session_state["prev_selections"] = {k: v[0] for k, v in current_selections.items()}
-            st.success("Leaderboard updated!")
             st.rerun()
+
 # --- TAB 3: BLOG ---
 with tab3:
     st.header("Squad Feed")
