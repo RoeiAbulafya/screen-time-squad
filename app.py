@@ -54,7 +54,8 @@ with tab1:
     app_logs = {app: st.number_input(f"{app} (hrs):", min_value=0.0, max_value=24.0, step=0.1) 
                 for app in st.session_state["tracked_apps"]}
 
-   if st.button("Save Daily Log"):
+    # Make sure this 'if' starts at the same indentation level as 'app_logs ='
+    if st.button("Save Daily Log"):
         try:
             data_to_insert = {
                 "date": str(log_date), 
@@ -66,7 +67,7 @@ with tab1:
             st.success("Log saved!")
             st.rerun()
         except Exception as e:
-            st.error(f"INSERT ERROR: {e}") # This will tell us the exact column mismatch
+            st.error(f"INSERT ERROR: {e}")
             st.stop()
 
     st.divider()
