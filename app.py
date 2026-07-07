@@ -84,7 +84,7 @@ with tab1:
         
         # 3. יצירת הגרף ב-Plotly
         # color='user' הוא מה שיגרום לכל משתמש לקבל קו בצבע שונה
-        fig = px.line(df, x='date', y='total_hours', color='user', 
+        fig = px.line(df, x='date', y='hours', color='user', 
                       markers=True, title="Screen Time by User")
         
         st.plotly_chart(fig, use_container_width=True)
