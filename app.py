@@ -53,8 +53,7 @@ with tab1:
     minutes = st.number_input("minutes:", min_value=0.0, max_value=24.0, step=0.01)
     app_logs = {app: st.number_input(f"{app} (hrs):", min_value=0.0, max_value=24.0, step=0.01) 
                 for app in st.session_state["tracked_apps"]}
-    for app in tracked_apps:
-        st.header(f"app_logs{app}")
+
     if st.button("Save Daily Log"):
         try:
             data_to_insert = {
