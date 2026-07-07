@@ -55,21 +55,29 @@ with tab1:
     app_logs = {app: [st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.01),st.number_input(f"{app} (minutes):", min_value=0.0, max_value=24.0, step=0.01) ]
                 for app in st.session_state["tracked_apps"]}
 
-    if st.button("Save Daily Log"):
-        try:
-            data_to_insert = {
-                "date": str(log_date), 
-                "user": st.session_state["user_name"], 
-                "hours": hours, 
-                "minutes": minutes,
-                "app_data": app_logs
-            }
+   if st.button("Save Daily Log"):
+        # 1. בדיקה אם כבר קיים לוג לאותו משתמש ותאריך
+        existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
+
+        if existing_log:
+            # 2. אם קיים, נציג אזהרה ושאלת אישור
+            st.warning("You have already logged data for this date.")
+            if st.button("Yes, overwrite existing data"):
+                # מחיקת הרשומה הישנה
+                supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
+                # הכנסת החדשה
+                data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "total_hours": total_hours, "app_data": app_logs}
+                supabase.table("logs").insert(data_to_insert).execute()
+                st.success("Log updated successfully!")
+                st.rerun()
+            else:
+                st.info("Update cancelled.")
+        else:
+            # 3. אם לא קיים, פשוט נכניס
+            data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "total_hours": total_hours, "app_data": app_logs}
             supabase.table("logs").insert(data_to_insert).execute()
             st.success("Log saved!")
             st.rerun()
-        except Exception as e:
-            st.error(f"INSERT ERROR: {e}")
-            st.stop()
 
     st.divider()
     st.subheader("Squad Progress Chart")  
