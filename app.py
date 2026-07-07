@@ -82,6 +82,7 @@ with tab1:
         st.line_chart(plot_df.set_index("date")["total_hours"])
 
 # --- TAB 2: CHALLENGES ---
+# --- TAB 2: CHALLENGES ---
 with tab2:
     st.header("🏆 Leaderboard")
     leaderboard = supabase.table("leaderboard").select("*").order("points", desc=True).execute().data
@@ -89,22 +90,58 @@ with tab2:
         st.dataframe(pd.DataFrame(leaderboard), use_container_width=True)
     
     st.subheader("✅ Daily Challenges")
-    challenges = supabase.table("challenges").select("*").execute().data
+    challenges_data = supabase.table("challenges").select("*").execute().data
+   
+    # --- ADD NEW CHALLENGE SECTION ---
+    with st.expander("➕ Suggest a New Challenge"):
+        with st.form("add_challenge_form", clear_on_submit=True):
+            new_task = st.text_input("What is the challenge?")
+            new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
+            if st.form_submit_button("Submit Suggestion"):
+                if new_task:
+                    supabase.table("challenges").insert({"task": new_task, "points": new_points}).execute()
+                    st.success(f"Added '{new_task}' to the list!")
+                    st.rerun()
+                else:
+                    st.error("Please enter a task name.")
+
+    st.subheader("✅ Daily Challenges")
+    
+    # Initialize session state for tracking previous selections
+    if "prev_selections" not in st.session_state:
+        st.session_state["prev_selections"] = {}
+
     with st.form("challenges_form"):
-        selected_points = 0
-        for ch in challenges:
-            if st.checkbox(f"{ch['task']} ({ch['points']} pts)", key=f"ch_{ch['task']}"):
-                selected_points += ch['points']
+        current_selections = {}
+        for ch in challenges_data:
+            # Create checkbox and store its state
+            is_checked = st.checkbox(f"{ch['task']} ({ch['points']} pts)", key=f"ch_{ch['task']}")
+            current_selections[ch['task']] = (is_checked, ch['points'])
         
-        if st.form_submit_button("Submit Points"):
+        if st.form_submit_button("Update Score"):
             user = st.session_state['user_name']
+            
+            # Calculate net change (New - Old)
+            point_change = 0
+            for task, (is_checked, points) in current_selections.items():
+                was_checked = st.session_state["prev_selections"].get(task, False)
+                if is_checked and not was_checked:
+                    point_change += points      # Just checked
+                elif not is_checked and was_checked:
+                    point_change -= points      # Just unchecked (REDUCE POINTS)
+            
+            # Update Database
             curr = supabase.table("leaderboard").select("points").eq("user", user).execute().data
             if curr:
-                supabase.table("leaderboard").update({"points": curr[0]['points'] + selected_points}).eq("user", user).execute()
+                new_total = curr[0]['points'] + point_change
+                supabase.table("leaderboard").update({"points": new_total}).eq("user", user).execute()
             else:
-                supabase.table("leaderboard").insert({"user": user, "points": selected_points}).execute()
+                supabase.table("leaderboard").insert({"user": user, "points": point_change}).execute()
+            
+            # Save new state and rerun
+            st.session_state["prev_selections"] = {k: v[0] for k, v in current_selections.items()}
+            st.success("Leaderboard updated!")
             st.rerun()
-
 # --- TAB 3: BLOG ---
 with tab3:
     st.header("Squad Feed")
