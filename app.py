@@ -54,14 +54,20 @@ with tab1:
     app_logs = {app: st.number_input(f"{app} (hrs):", min_value=0.0, max_value=24.0, step=0.1) 
                 for app in st.session_state["tracked_apps"]}
 
-    if st.button("Save Daily Log"):
-        # Note: 'app_data' column must exist in your Supabase 'logs' table
-        supabase.table("logs").insert({
-            "date": str(log_date), "user": st.session_state["user_name"], 
-            "total_hours": total_hours, "app_data": app_logs
-        }).execute()
-        st.success("Log saved!")
-        st.rerun()
+   if st.button("Save Daily Log"):
+        try:
+            data_to_insert = {
+                "date": str(log_date), 
+                "user": st.session_state["user_name"], 
+                "total_hours": total_hours, 
+                "app_data": app_logs
+            }
+            supabase.table("logs").insert(data_to_insert).execute()
+            st.success("Log saved!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"INSERT ERROR: {e}") # This will tell us the exact column mismatch
+            st.stop()
 
     st.divider()
     st.subheader("Squad Progress Chart")
