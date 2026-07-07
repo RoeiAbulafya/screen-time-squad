@@ -27,6 +27,15 @@ logs_df = conn.read(worksheet="Logs", ttl=0)
 leaderboard_df = conn.read(worksheet="Leaderboard", ttl=0)
 blog_df = conn.read(worksheet="Blog", ttl=0)
 comments_df = conn.read(worksheet="Comments", ttl=0)
+# Add a safety wrapper for the initial read
+try:
+    logs_df = conn.read(worksheet="Logs", ttl=0)
+    leaderboard_df = conn.read(worksheet="Leaderboard", ttl=0)
+    blog_df = conn.read(worksheet="Blog", ttl=0)
+    comments_df = conn.read(worksheet="Comments", ttl=0)
+except Exception as e:
+    st.error("Google is busy! Please wait a minute and refresh the page.")
+    st.stop()
 
 # --- TOP BAR: SQUAD MEMBERS ---
 st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
