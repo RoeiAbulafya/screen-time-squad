@@ -18,7 +18,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# DIAGNOSTIC TOOL - ADD THIS TO SEE THE ERROR
+# DIAGNOSTIC TOOL 
 try:
     # This tries to fetch just one row to see if the table exists
     test = supabase.table("logs").select("*").limit(1).execute()
@@ -49,12 +49,12 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blo
 with tab1:
     st.header("Log Your Time")
     log_date = st.date_input("Date")
-    total_hours = st.number_input("Total Hours:", min_value=0.0, max_value=24.0, step=0.1)
-    
-    app_logs = {app: st.number_input(f"{app} (hrs):", min_value=0.0, max_value=24.0, step=0.1) 
+    hours = st.number_input("Total Hours:", min_value=0.0, max_value=24.0, step=0.01)
+    minutes = st.number_input("minutes:", min_value=0.0, max_value=24.0, step=0.01)
+    app_logs = {app: st.number_input(f"{app} (hrs):", min_value=0.0, max_value=24.0, step=0.01) 
                 for app in st.session_state["tracked_apps"]}
-
-    # Make sure this 'if' starts at the same indentation level as 'app_logs ='
+    for app in tracked_apps:
+        st.header(app_logs{app})
     if st.button("Save Daily Log"):
         try:
             data_to_insert = {
@@ -81,7 +81,6 @@ with tab1:
         plot_df['date'] = pd.to_datetime(plot_df['date'])
         st.line_chart(plot_df.set_index("date")["total_hours"])
 
-# --- TAB 2: CHALLENGES ---
 # --- TAB 2: CHALLENGES ---
 with tab2:
     st.header("🏆 Leaderboard")
