@@ -3,6 +3,7 @@ import uuid
 import pandas as pd  # FIXED: Added pandas import here!
 from datetime import datetime
 from supabase import create_client
+import plotly.express as px
 
 st.set_page_config(page_title="Screen Time Squad", layout="centered")
 
@@ -51,9 +52,10 @@ with tab1:
     log_date = st.date_input("Date")
     hours = st.number_input("Total Hours:", min_value=0.0, max_value=24.0, step=0.01)
     minutes = st.number_input("minutes:", min_value=0.0, max_value=24.0, step=0.01)
-    app_logs = {app: st.number_input(f"{app} (hrs):", min_value=0.0, max_value=24.0, step=0.01) 
+    app_logs = {app: [st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.01),st.number_input(f"{app} (minutes):", min_value=0.0, max_value=24.0, step=0.01) ]
                 for app in st.session_state["tracked_apps"]}
-
+    for app in tracked_apps:
+        st.header(f"app_logs{app}")
     if st.button("Save Daily Log"):
         try:
             data_to_insert = {
@@ -71,15 +73,24 @@ with tab1:
             st.stop()
 
     st.divider()
-    st.subheader("Squad Progress Chart")
-    selected_user = st.selectbox("Filter Chart by User:", ["All"] + unique_users)
-    logs_result = supabase.table("logs").select("*").execute().data
-    if logs_result:
-        df = pd.DataFrame(logs_result)
-        plot_df = df if selected_user == "All" else df[df["user"] == selected_user]
-        # Ensure 'date' is datetime for better plotting
-        plot_df['date'] = pd.to_datetime(plot_df['date'])
-        st.line_chart(plot_df.set_index("date")["hours"])
+    st.subheader("Squad Progress Chart")  
+    # 1. שליפת הנתונים מהטבלה
+    logs = supabase.table("logs").select("*").execute().data
+    
+    if logs:
+        df = pd.DataFrame(logs)
+        
+        # 2. המרת עמודת התאריך לפורמט זמן אם צריך
+        df['date'] = pd.to_datetime(df['date'])
+        
+        # 3. יצירת הגרף ב-Plotly
+        # color='user' הוא מה שיגרום לכל משתמש לקבל קו בצבע שונה
+        fig = px.line(df, x='date', y='total_hours', color='user', 
+                      markers=True, title="Screen Time by User")
+        
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.write("No log data to display yet.")
 
 # --- TAB 2: CHALLENGES ---
 with tab2:
