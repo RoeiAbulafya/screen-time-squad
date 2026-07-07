@@ -18,6 +18,15 @@ def init_supabase():
 
 supabase = init_supabase()
 
+# DIAGNOSTIC TOOL - ADD THIS TO SEE THE ERROR
+try:
+    # This tries to fetch just one row to see if the table exists
+    test = supabase.table("logs").select("*").limit(1).execute()
+    st.write("Connection Successful!")
+except Exception as e:
+    st.error(f"DEBUG ERROR: {e}")
+    st.stop()
+    
 # --- LOGIN ---
 if not st.session_state["user_name"]:
     st.title("👋 Welcome to Screen Time Squad!")
