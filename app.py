@@ -72,8 +72,47 @@ with tab1:
 
 # --- TAB 2: CHALLENGES ---
 with tab2:
-    st.header("Leaderboard")
-    st.dataframe(leaderboard_df.sort_values(by="Points", ascending=False), use_container_width=True)
+    st.header("🏆 Leaderboard")
+    # Read the challenge list from the sheet
+    challenges_df = conn.read(worksheet="Challenges", ttl=0)
+    
+    if not leaderboard_df.empty:
+        st.dataframe(leaderboard_df.sort_values(by="Points", ascending=False), use_container_width=True)
+    
+    st.subheader("✅ Daily Challenges")
+    
+    # 1. Challenge Selection
+    with st.form("challenges_form"):
+        selected_points = 0
+        for _, row in challenges_df.iterrows():
+            if st.checkbox(f"{row['Task']} ({row['Points']} pts)", key=f"ch_{row['Task']}"):
+                selected_points += row['Points']
+        
+        if st.form_submit_button("Submit Points"):
+            if st.session_state['user_name'] in leaderboard_df['User'].values:
+                idx = leaderboard_df[leaderboard_df["User"] == st.session_state["user_name"]].index[0]
+                leaderboard_df.at[idx, "Points"] += selected_points
+            else:
+                leaderboard_df = pd.concat([leaderboard_df, pd.DataFrame([{"User": st.session_state['user_name'], "Points": selected_points}])], ignore_index=True)
+            conn.update(data=leaderboard_df, worksheet="Leaderboard")
+            st.rerun()
+
+    # 2. Add/Remove Custom Challenges
+    with st.expander("➕ Create New Challenge"):
+        new_task = st.text_input("Task Description")
+        new_pts = st.number_input("Points Reward", min_value=1, value=10)
+        
+        c1, c2 = st.columns(2)
+        if c1.button("Add Challenge"):
+            new_row = pd.DataFrame([{"Task": new_task, "Points": new_pts}])
+            conn.update(data=pd.concat([challenges_df, new_row]), worksheet="Challenges")
+            st.rerun()
+            
+        if c2.button("Delete Selected"):
+            # Logic to delete a challenge if you want to clean up the list
+            updated_challenges = challenges_df[challenges_df["Task"] != new_task]
+            conn.update(data=updated_challenges, worksheet="Challenges")
+            st.rerun()
 
 # --- TAB 3: BLOG & COMMENTS ---
 with tab3:
