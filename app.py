@@ -72,8 +72,8 @@ def calculate_streak(user_name, all_logs):
 
 # הצגה מתחת לכותרת הראשית או בתפריט הצד
 user_streak = calculate_streak(st.session_state["user_name"], supabase.table("logs").select("*").execute().data)
-st.markdown(f"### מחובר כ: **{st.session_state['user_name']}** 🔥 {user_streak} ימים ברצף!")
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog"])
+st.markdown(f"### Connected as: **{st.session_state['user_name']}** 🔥 {user_streak} days in a row!")
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog", "💡 Insights"])
 
 # --- TAB 1: DASHBOARD ---
 with tab1:
@@ -216,18 +216,18 @@ with tab2:
     for log in all_logs:
         total_squad_hours += log.get('hours', 0) + (log.get('minutes', 0) / 60)
         
-    st.subheader("🤝 משימת ה-Co-op של הקבוצה")
-    st.markdown(f"**היעד השבועי:** לשמור את סך זמן המסך המשותף מתחת ל-{int(SQUAD_WEEKLY_GOAL)} שעות.")
+    st.subheader("🤝 Group's Co-op Challenge:")
+    st.markdown(f"**Weekly goal: Keep the total screen time under - {int(SQUAD_WEEKLY_GOAL)} hours")
     
     # חישוב אחוז ההתקדמות (כדי לא לחרוג מ-1.0 ב-Progress Bar)
     progress_val = min(total_squad_hours / SQUAD_WEEKLY_GOAL, 1.0)
     
     # שינוי צבע הבר בהתאם למצב - אם מתקרבים ליעד זה נהיה מסוכן (צבע אדום)
     if progress_val > 0.8:
-        st.warning(f"זהירות! הגענו ל-{int(total_squad_hours)} שעות מסך קבוצתיות. אנחנו קרובים ליעד!")
+        st.warning(f" Watch out! We're gettiong dangerously close to our daily limit! We're currently on- {int(total_squad_hours)} hours")
         st.progress(progress_val)
     else:
-        st.success(f"מצבנו מצוין. צברנו עד כה {int(total_squad_hours)} שעות מתוך {int(SQUAD_WEEKLY_GOAL)}.")
+        st.success(f" We're doing fine! We are currently on {int(total_squad_hours)} hours out of {int(SQUAD_WEEKLY_GOAL)}.")
         st.progress(progress_val)
     
     st.divider()
