@@ -45,7 +45,8 @@ if not st.session_state["user_name"]:
                     st.session_state["user_name"] = name.strip().capitalize()
                     st.rerun()
         
-    st.stop()
+    st.stop()     
+
 # --- TOP BAR ---
 st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
 users_data = supabase.table("logs").select("user").execute().data
@@ -57,20 +58,28 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blo
 # --- TAB 1: DASHBOARD ---
 with tab1:
     st.header("Log Your Time")
-    # ... (קוד הקלט נשאר אותו דבר) ...
-    log_date = st.date_input("Date")
-    hours_input = st.number_input("Hours:", min_value=0, max_value=24, step=1)
-    minutes_input = st.number_input("Minutes:", min_value=0, max_value=59, step=1)
     
-    app_logs = {app: st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.1) 
-                for app in st.session_state["tracked_apps"]}
+    # 1. קלט זמן מסך כללי בשורה אחת
+    col_h, col_m = st.columns(2)
+    with col_h:
+        hours_input = st.number_input("Total Hours:", min_value=0, max_value=24, step=1)
+    with col_m:
+        minutes_input = st.number_input("Total Minutes:", min_value=0, max_value=59, step=1)
     
-    st.subheader("Add New App to Track")
-    new_app = st.text_input("App Name:")
-    if st.button("Add App"):
-        if new_app and new_app not in st.session_state["tracked_apps"]:
-            st.session_state["tracked_apps"].append(new_app)
-            st.rerun()
+    st.subheader("App Breakdown")
+    
+    # 2. קלט לכל אפליקציה - שעות ודקות זה לצד זה
+    app_logs = {}
+    for app in st.session_state["tracked_apps"]:
+        st.markdown(f"**{app}**")
+        c1, c2 = st.columns(2)
+        with c1:
+            h = st.number_input(f"{app} (Hours):", min_value=0, max_value=24, step=1, key=f"{app}_h")
+        with c2:
+            m = st.number_input(f"{app} (Minutes):", min_value=0, max_value=59, step=1, key=f"{app}_m")
+        
+        # המרה לערך עשרוני עבור הגרף (למשל: 1.5 שעות)
+        app_logs[app] = h + (m / 60)
 
     if st.button("Save Daily Log"):
         # ... (קוד השמירה נשאר אותו דבר) ...
