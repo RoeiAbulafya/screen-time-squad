@@ -73,7 +73,7 @@ def calculate_streak(user_name, all_logs):
 # הצגה מתחת לכותרת הראשית או בתפריט הצד
 user_streak = calculate_streak(st.session_state["user_name"], supabase.table("logs").select("*").execute().data)
 st.markdown(f"### Connected as: **{st.session_state['user_name']}** 🔥 {user_streak} days in a row!")
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog", "💡 Insights"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog", "💡 Insights"])
 
 # --- TAB 1: DASHBOARD ---
 with tab1:
