@@ -174,17 +174,22 @@ with tab3:
                     st.rerun()
             
             # --- אזור תגובות ---
-            with st.expander(f"💬 View Comments"):
-                comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
-                comments = comments_resp.data if comments_resp.data else []
+            # קודם נשלוף את התגובות כדי שנדע כמה יש
+            comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
+            comments = comments_resp.data if comments_resp.data else []
+            
+            # עכשיו נציג את ה-Expander עם המונה בכותרת
+            with st.expander(f"💬 View Comments ({len(comments)})"):
                 
+                # הצגת התגובות הקיימות
                 if comments:
                     for c in comments:
                         st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
                         
                         # לייק לתגובה
-                        c_liked_by = c.get('liked_by') if c.get('liked_by') is not None else []
+                        c_liked_by = c.get('liked_by') or []
                         c_is_liked = st.session_state["user_name"] in c_liked_by
+                        
                         if st.button(f"{'❤️' if c_is_liked else '🤍'} {len(c_liked_by)}", key=f"c_like_{c['id']}"):
                             if c_is_liked:
                                 c_liked_by.remove(st.session_state["user_name"])
@@ -213,5 +218,3 @@ with tab3:
                                 "liked_by": []
                             }).execute()
                             st.rerun()
-            
-            st.markdown("---")
