@@ -193,7 +193,7 @@ with tab3:
                                 supabase.table("comments").delete().eq("id", c['id']).execute()
                                 st.rerun()
                 else:
-                st.caption("No comments yet. Be the first!")
+                    st.caption("No comments yet. Be the first!")
             # --- הוספת תגובה חדשה ---
             with st.expander("➕ Add Comment"):
                 # כל טופס חייב מפתח ייחודי משלו
