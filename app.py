@@ -86,30 +86,30 @@ with tab1:
         df_apps = pd.DataFrame(chart_data)
         if not df_apps.empty:
         # 1. הגדרת פלטת צבעים אישית (אפשר להוסיף עוד צבעים)
-        color_map = {
-            "Instagram": "#E1306C", "YouTube": "#FF0000", 
-            "Reddit": "#FF4500", "TikTok": "#00F2EA",
-            "Facebook": "#4267B2"
-        }
+            color_map = {
+                "Instagram": "#E1306C", "YouTube": "#FF0000", 
+                "Reddit": "#FF4500", "TikTok": "#00F2EA",
+                "Facebook": "#4267B2"
+            }
         
-        fig_apps = px.bar(df_apps, x="duration", y="user", color="app", 
-                         orientation='h', barmode='stack',
-                         color_discrete_map=color_map, # שימוש בצבעים מוגדרים
-                         template="plotly_white") # רקע נקי
+            fig_apps = px.bar(df_apps, x="duration", y="user", color="app", 
+                            orientation='h', barmode='stack',
+                            color_discrete_map=color_map, # שימוש בצבעים מוגדרים
+                            template="plotly_white") # רקע נקי
 
-        # 2. עיצוב העמודות (דק יותר)
-        fig_apps.update_traces(width=0.4) # שולט בעובי העמודה
+            # 2. עיצוב העמודות (דק יותר)
+            fig_apps.update_traces(width=0.4) # שולט בעובי העמודה
 
-        # 3. ניקוי העיצוב (להעיף צירים מיותרים שנותנים מראה של "דוח")
-        fig_apps.update_layout(
-            height=200, # גובה קטן לגרף דק
-            margin=dict(l=0, r=0, t=30, b=0),
-            xaxis_title=None,
-            yaxis_title=None,
-            showlegend=True
-        )
+            # 3. ניקוי העיצוב (להעיף צירים מיותרים שנותנים מראה של "דוח")
+            fig_apps.update_layout(
+                height=200, # גובה קטן לגרף דק
+                margin=dict(l=0, r=0, t=30, b=0),
+                xaxis_title=None,
+                yaxis_title=None,
+                showlegend=True
+            )
         
-        st.plotly_chart(fig_apps, width='stretch')
+            st.plotly_chart(fig_apps, width='stretch')
     else:
         st.write("No app data logged for today.")
 
