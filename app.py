@@ -183,7 +183,7 @@ with tab3:
                         st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
                         
                         # לייק לתגובה
-                        c_liked_by = c.get('liked_by', [])
+                        c_liked_by = c.get('liked_by') if c.get('liked_by') is not None else []
                         c_is_liked = st.session_state["user_name"] in c_liked_by
                         if st.button(f"{'❤️' if c_is_liked else '🤍'} {len(c_liked_by)}", key=f"c_like_{c['id']}"):
                             if c_is_liked:
