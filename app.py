@@ -39,23 +39,7 @@ if not st.session_state["user_name"]:
         if st.button("Get Started 🚀"):
             if name.strip():
                 st.session_state["user_name"] = name.strip().capitalize()
-                st.rerun()
-
-    with col_chart:
-        # גרף דמי שמראה ירידה (Mock Data)
-        st.subheader("Why join us?")
-        chart_data = pd.DataFrame({
-            'Days': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-            'Hours': [6, 5.5, 4.5, 3.5, 2.5]
-        })
-        fig = px.line(chart_data, x='Days', y='Hours', 
-                      title="Average Screen Time Trend",
-                      markers=True, line_shape='spline')
-        fig.update_traces(line_color='#00F2EA', line_width=4)
-        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
-                          xaxis_showgrid=False, yaxis_showgrid=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
+                st.rerun()   
     st.stop()
 
 # --- TOP BAR ---
