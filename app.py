@@ -39,85 +39,74 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blo
 # --- TAB 1: DASHBOARD ---
 with tab1:
     st.header("Log Your Time")
+    # ... (קוד הקלט נשאר אותו דבר) ...
     log_date = st.date_input("Date")
-    # קלט מפוצל כפי שביקשת
     hours_input = st.number_input("Hours:", min_value=0, max_value=24, step=1)
     minutes_input = st.number_input("Minutes:", min_value=0, max_value=59, step=1)
     
     app_logs = {app: st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.1) 
                 for app in st.session_state["tracked_apps"]}
+    
     st.subheader("Add New App to Track")
     new_app = st.text_input("App Name:")
     if st.button("Add App"):
-        if new_app not in st.session_state["tracked_apps"]:
+        if new_app and new_app not in st.session_state["tracked_apps"]:
             st.session_state["tracked_apps"].append(new_app)
             st.rerun()
+
     if st.button("Save Daily Log"):
+        # ... (קוד השמירה נשאר אותו דבר) ...
         existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
-
         if existing_log:
-            st.warning("You have already logged data for this date.")
-            if st.button("Yes, overwrite existing data"):
-                supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
-                data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "hours": hours_input, "minutes": minutes_input, "app_data": app_logs}
-                supabase.table("logs").insert(data_to_insert).execute()
-                st.success("Log updated successfully!")
-                st.rerun()
-        else:
-            data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "hours": hours_input, "minutes": minutes_input, "app_data": app_logs}
-            supabase.table("logs").insert(data_to_insert).execute()
-            st.success("Log saved!")
-            st.rerun()
+            supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
+        data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "hours": hours_input, "minutes": minutes_input, "app_data": app_logs}
+        supabase.table("logs").insert(data_to_insert).execute()
+        st.success("Log saved!")
+        st.rerun()
 
     st.divider()
-    st.subheader("Squad Progress Chart") 
-    logs = supabase.table("logs").select("*").execute().data
-    st.divider()
-    st.subheader("Daily App Breakdown")
     
-    # שליפת נתוני היום האחרון מכל המשתמשים
+    # 1. שליפת כל הנתונים לגרף הקווי (Squad Progress)
+    all_logs = supabase.table("logs").select("*").execute().data
+    
+    # 2. שליפת נתוני היום בלבד (לגרף האפליקציות)
     today = str(datetime.now().date())
-    logs = supabase.table("logs").select("*").eq("date", today).execute().data
+    logs_today = [l for l in all_logs if l['date'] == today]
     
-    if logs:
-        # נבנה DataFrame שמתאים לגרף מוערם
-        # נניח ש-logs מכיל עמודה 'app_data' שהיא JSON
+    # --- גרף אפליקציות יומי ---
+    st.subheader("Daily App Breakdown")
+    if logs_today:
         chart_data = []
-        for log in logs:
+        for log in logs_today:
             app_data = log.get('app_data', {})
             for app, duration in app_data.items():
                 if duration > 0:
                     chart_data.append({"user": log['user'], "app": app, "duration": duration})
         
         df_apps = pd.DataFrame(chart_data)
-        
         if not df_apps.empty:
-            fig = px.bar(df_apps, x="duration", y="user", color="app", 
-                         orientation='h', barmode='stack',
-                         title="App Usage Today by Squad Members")
-            st.plotly_chart(fig, width='stretch')
-        else:
-            st.write("No app data logged for today yet.")
+            fig_apps = px.bar(df_apps, x="duration", y="user", color="app", 
+                             orientation='h', barmode='stack', title="App Usage Today")
+            st.plotly_chart(fig_apps, width='stretch')
     else:
-        st.write("No logs for today.")
-    if logs:
-        df = pd.DataFrame(logs)
-        df['user'] = df['user'].str.strip() # ניקוי רווחים מהשמות
+        st.write("No app data logged for today.")
+
+    st.divider()
+
+    # --- גרף קווי (Squad Progress Chart) ---
+    st.subheader("Squad Progress Chart") 
+    if all_logs:
+        df = pd.DataFrame(all_logs)
+        df['user'] = df['user'].str.strip()
         df['date'] = pd.to_datetime(df['date'])
-        
-        # חישוב זמן כולל
         df['total_time'] = df['hours'] + (df['minutes'] / 60)
-        
-        # מיון חובה לרציפות הקווים
         df = df.sort_values(by=['user', 'date'])
         
-        fig = px.line(df, x='date', y='total_time', color='user', 
-                      markers=True, title="Screen Time by User (Total Hours)")
-        
-        st.plotly_chart(fig, width='stretch') #st.dataframe(df, width='stretch')  or st.plotly_chart(fig, width='stretch')
+        fig_line = px.line(df, x='date', y='total_time', color='user', 
+                          markers=True, title="Screen Time by User (Total Hours)")
+        st.plotly_chart(fig_line, width='stretch')
     else:
         st.write("No log data to display yet.")
-
 # --- TAB 2: CHALLENGES ---
 with tab2:
     st.header("🏆 Leaderboard")
