@@ -168,7 +168,7 @@ with tab3:
                         supabase.table("blog").delete().eq("id", p['id']).execute()
                         st.rerun()
             
-            with st.expander(f"💬 View/Add Comments"):
+            with st.expander(f"💬 View Comments"):
                 # 1. שליפה ישירה של התגובות לפוסט הזה בלבד (יותר יעיל מסינון ברשימה גדולה)
                 comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
                 comments = comments_resp.data if comments_resp.data else []
@@ -179,7 +179,20 @@ with tab3:
                         st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
                 else:
                     st.caption("No comments yet. Be the first!")
-                  
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                likes_count = p.get('likes', 0)
+                if st.button(f"👍 Like ({likes_count})", key=f"like_{p['id']}"):
+                    supabase.table("comments").update({"likes": likes_count + 1}).eq("id", p['id']).execute()
+                    st.rerun()
+            
+            with col2:
+                if p["user"] == st.session_state["user_name"]:
+                    if st.button("🗑️ Delete", key=f"del_{p['id']}"):
+                        # שימו לב: אם מוחקים פוסט, כדאי שיהיה מוגדר Cascade ב-DB,
+                        # או שמוחקים ידנית קודם את התגובות כדי למנוע שגיאות
+                        supabase.table("comments").delete().eq("id", p['id']).execute()
+                        st.rerun()
             # --- הוספת תגובה חדשה ---
             with st.expander("➕ Add Comment"):
                 # כל טופס חייב מפתח ייחודי משלו
