@@ -130,17 +130,65 @@ with tab2:
 # --- TAB 3: BLOG ---
 with tab3:
     st.header("Squad Feed")
+    
+    # אזור פרסום פוסט חדש
     with st.form("blog_form", clear_on_submit=True):
         post = st.text_area("Share a reflection:")
         if st.form_submit_button("Post") and post:
-            supabase.table("blog").insert({"user": st.session_state["user_name"], "post": post}).execute()
+            # הוספתי likes: 0 למקרה שאין ברירת מחדל בטבלה
+            supabase.table("blog").insert({"user": st.session_state["user_name"], "post": post, "likes": 0}).execute()
             st.rerun()
 
+    # משיכת כל הפוסטים וכל התגובות במקביל כדי לייעל זמני טעינה
     posts = supabase.table("blog").select("*").order("created_at", desc=True).execute().data
+    all_comments_response = supabase.table("comments").select("*").order("created_at", asc=True).execute().data
+    
+    # הבטחה שיש לנו רשימה גם אם הטבלה ריקה
+    all_comments = all_comments_response if all_comments_response else []
+
+    # מעבר והצגה של כל פוסט
     for p in posts:
-        st.markdown(f"**{p['user']}**")
-        st.info(p['post'])
-        if p["user"] == st.session_state["user_name"]:
-            if st.button("🗑️ Delete", key=f"del_{p['id']}"):
-                supabase.table("blog").delete().eq("id", p['id']).execute()
-                st.rerun()
+        with st.container():
+            st.markdown(f"**{p['user']}**")
+            st.info(p['post'])
+            
+            # --- אזור כפתורים (לייק ומחיקה) ---
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                likes_count = p.get('likes', 0)
+                if st.button(f"👍 Like ({likes_count})", key=f"like_{p['id']}"):
+                    supabase.table("blog").update({"likes": likes_count + 1}).eq("id", p['id']).execute()
+                    st.rerun()
+            
+            with col2:
+                if p["user"] == st.session_state["user_name"]:
+                    if st.button("🗑️ Delete", key=f"del_{p['id']}"):
+                        # שימו לב: אם מוחקים פוסט, כדאי שיהיה מוגדר Cascade ב-DB,
+                        # או שמוחקים ידנית קודם את התגובות כדי למנוע שגיאות
+                        supabase.table("blog").delete().eq("id", p['id']).execute()
+                        st.rerun()
+            
+            # --- הצגת תגובות קיימות ---
+            # סינון תגובות ששייכות רק לפוסט הספציפי הזה
+            post_comments = [c for c in all_comments if c.get('post_id') == p['id']]
+            
+            if post_comments:
+                with st.expander(f"💬 View Comments ({len(post_comments)})"):
+                    for c in post_comments:
+                        st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
+            
+            # --- הוספת תגובה חדשה ---
+            with st.expander("➕ Add Comment"):
+                # כל טופס חייב מפתח ייחודי משלו
+                with st.form(f"comment_form_{p['id']}", clear_on_submit=True):
+                    new_comment = st.text_input("Type your comment:")
+                    if st.form_submit_button("Send"):
+                        if new_comment.strip():
+                            supabase.table("comments").insert({
+                                "post_id": p['id'], 
+                                "user": st.session_state["user_name"], 
+                                "comment": new_comment.strip()
+                            }).execute()
+                            st.rerun()
+            
+            st.divider() # קו הפרדה בין פוסט לפוסט
