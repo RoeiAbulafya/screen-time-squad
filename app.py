@@ -170,8 +170,10 @@ with tab3:
             
             # --- הצגת תגובות קיימות ---
             # סינון תגובות ששייכות רק לפוסט הספציפי הזה
-            post_comments = [c for c in all_comments if c.get('post_id') == p['id'] else pass]
-            
+            post_comments = [
+                c for c in all_comments 
+                if isinstance(c, dict) and c.get('post_id') == p['id']
+                ]
             if post_comments:
                 with st.expander(f"💬 View Comments ({len(post_comments)})"):
                     for c in post_comments:
