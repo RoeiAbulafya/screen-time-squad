@@ -52,7 +52,27 @@ st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
 users_data = supabase.table("logs").select("user").execute().data
 unique_users = sorted(list(set([u['user'] for u in users_data]))) if users_data else []
 st.caption(f"Squad Members: {', '.join(unique_users) if unique_users else 'Be the first to join!'}")
+# --- לוגיקת חישוב STREAK ---
+def calculate_streak(user_name, all_logs):
+    user_dates = sorted([log['date'] for log in all_logs if log['user'] == user_name], reverse=True)
+    if not user_dates:
+        return 0
+    
+    streak = 0
+    current_date = datetime.now().date()
+    
+    for log_date_str in user_dates:
+        log_date = datetime.strptime(log_date_str, "%Y-%m-%d").date()
+        # בודקים אם הלוג הוא מהיום או אתמול (כדי לא לאפס את הסטריק אם עוד לא הזין היום)
+        if (current_date - log_date).days == streak or (current_date - log_date).days == streak + 1:
+            streak += 1
+        else:
+            break
+    return streak
 
+# הצגה מתחת לכותרת הראשית או בתפריט הצד
+user_streak = calculate_streak(st.session_state["user_name"], supabase.table("logs").select("*").execute().data)
+st.markdown(f"### מחובר כ: **{st.session_state['user_name']}** 🔥 {user_streak} ימים ברצף!")
 tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog"])
 
 # --- TAB 1: DASHBOARD ---
@@ -106,8 +126,6 @@ with tab1:
         st.success("Log saved!")
         st.rerun()
 
-    st.divider()
-    
     st.divider()
     
     # 5. הצגת הגרפים
@@ -187,6 +205,32 @@ with tab1:
         
 # --- TAB 2: CHALLENGES ---
 with tab2:
+    st.header("🏆 Squad Challenges")
+    
+    # אתגר קבוצתי שבועי (דוגמה: כולם יחד מתחת ל-50 שעות שבועיות)
+    SQUAD_WEEKLY_GOAL = 50.0
+    
+    # חישוב כל השעות של כל הקבוצה בשבוע האחרון (לצורך הפשטות כאן נסכום את כל הלוגים הקיימים, 
+    # בהמשך תוכל לסנן לפי 7 הימים האחרונים)
+    total_squad_hours = 0
+    for log in all_logs:
+        total_squad_hours += log.get('hours', 0) + (log.get('minutes', 0) / 60)
+        
+    st.subheader("🤝 משימת ה-Co-op של הקבוצה")
+    st.markdown(f"**היעד השבועי:** לשמור את סך זמן המסך המשותף מתחת ל-{int(SQUAD_WEEKLY_GOAL)} שעות.")
+    
+    # חישוב אחוז ההתקדמות (כדי לא לחרוג מ-1.0 ב-Progress Bar)
+    progress_val = min(total_squad_hours / SQUAD_WEEKLY_GOAL, 1.0)
+    
+    # שינוי צבע הבר בהתאם למצב - אם מתקרבים ליעד זה נהיה מסוכן (צבע אדום)
+    if progress_val > 0.8:
+        st.warning(f"זהירות! הגענו ל-{int(total_squad_hours)} שעות מסך קבוצתיות. אנחנו קרובים ליעד!")
+        st.progress(progress_val)
+    else:
+        st.success(f"מצבנו מצוין. צברנו עד כה {int(total_squad_hours)} שעות מתוך {int(SQUAD_WEEKLY_GOAL)}.")
+        st.progress(progress_val)
+    
+    st.divider()
     st.header("🏆 Leaderboard")
     leaderboard = supabase.table("leaderboard").select("*").order("points", desc=True).execute().data
     if leaderboard:
@@ -328,3 +372,47 @@ with tab3:
                     if st.button("🗑️ מחק פוסט", key=f"del_{p['id']}"):
                         supabase.table("blog").delete().eq("id", p['id']).execute()
                         st.rerun()
+# --- TAB 4: INSIGHTS ---
+with tab4:
+    st.header("✨ תובנות אישיות")
+    
+    # שליפת הנתונים של המשתמש הנוכחי
+    my_logs = [l for l in all_logs if l['user'] == st.session_state["user_name"]]
+    
+    if len(my_logs) >= 2:
+        # דוגמה ללוגיקת השוואה פשוטה בין היום האחרון לזה שלפניו
+        my_logs_sorted = sorted(my_logs, key=lambda x: x['date'], reverse=True)
+        latest_log = my_logs_sorted[0]
+        previous_log = my_logs_sorted[1]
+        
+        latest_time = latest_log.get('hours', 0) + (latest_log.get('minutes', 0) / 60)
+        previous_time = previous_log.get('hours', 0) + (previous_log.get('minutes', 0) / 60)
+        
+        # תובנה חכמה ראשונה
+        with st.container(border=True):
+            st.subheader("📊 המגמה שלך")
+            if latest_time < previous_time:
+                diff = previous_time - latest_time
+                percent_drop = int((diff / previous_time) * 100) if previous_time > 0 else 0
+                st.success(f"איזה אלופה/ה! ירדת ב-**{percent_drop}%** מזמן המסך שלך לעומת הדיווח הקודם. המשך כך!")
+            elif latest_time > previous_time:
+                st.warning("זמן המסך שלך קצת עלה לאחרונה. נסה לשים לב לאפליקציה שגוזלת ממך הכי הרבה זמן היום.")
+            else:
+                st.info("זמן המסך שלך נשאר יציב. בוא ננסה להוריד חצי שעה מחר!")
+
+        # זמן שהרווחנו (Time Reclaimed)
+        with st.container(border=True):
+            st.subheader("⏳ זמן שהרווחת")
+            # נניח שהיעד האישי הוא 4 שעות. כל מה שמתחת נחשב זמן "שנחסך".
+            daily_goal = 4.0 
+            if latest_time < daily_goal:
+                saved_time = daily_goal - latest_time
+                saved_h = int(saved_time)
+                saved_m = int((saved_time - saved_h) * 60)
+                
+                st.markdown(f"### הצלחת לחסוך **{saved_h}h {saved_m}m** היום! 🎉")
+                st.markdown("זה לגמרי מספיק זמן כדי לשבת בנחת על המפות ולתכנן את מסלול הטרק בנורווגיה, או לקפוץ לסשן בולדרינג ממוקד בלי הסחות דעת.")
+            else:
+                st.markdown("עדיין לא חסכת זמן היום מתחת ליעד (4 שעות). מחר זה יום חדש!")
+    else:
+        st.info("אנחנו צריכים לפחות 2 דיווחים כדי להתחיל לייצר לך תובנות חכמות. תמשיך לתעד!")
