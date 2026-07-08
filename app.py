@@ -20,24 +20,32 @@ supabase = init_supabase()
 
 # --- LOGIN ---
 if not st.session_state["user_name"]:
-        st.title("👋 Welcome to Screen Time Squad!")
+    # עיצוב מרכזי וממוקד
+    st.title("👋 Welcome to Screen Time Squad!")
+    
+    # שימוש ב-Container למראה נקי
+    with st.container():
         st.markdown("""
-        **Ready to take back your time?** 
+        ### Ready to take back your time? 
         Join the squad to track your screen time, compete in healthy challenges, 
-        and increase your digital wellbeing together with friends.
-        
-        *   📊 **Track:** Log your daily usage.
-        *   🏆 **Compete:** Climb the leaderboard.
-        *   🤝 **Connect:** Reflect with your squad.
+        and lower your digital footprint together with friends.
         """)
         
-        name = st.text_input("Enter your name to join:")
-        if st.button("Get Started 🚀"):
-            if name.strip():
-                st.session_state["user_name"] = name.strip().capitalize()
-                st.rerun() 
+        col1, col2 = st.columns([0.6, 0.4])
+        with col1:
+            st.markdown("""
+            *   📊 **Track:** Log your daily usage.
+            *   🏆 **Compete:** Climb the leaderboard.
+            *   🤝 **Connect:** Reflect with your squad.
+            """)
+            
+            name = st.text_input("Enter your name to join:")
+            if st.button("Get Started 🚀"):
+                if name.strip():
+                    st.session_state["user_name"] = name.strip().capitalize()
+                    st.rerun()
+        
     st.stop()
-
 # --- TOP BAR ---
 st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
 users_data = supabase.table("logs").select("user").execute().data
