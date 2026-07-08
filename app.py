@@ -237,13 +237,15 @@ with tab3:
     # משיכת פוסטים
     posts_resp = supabase.table("blog").select("*").order("created_at", desc=True).execute()
     posts = posts_resp.data if posts_resp.data else []
-
     # מעבר והצגה של כל פוסט
     for p in posts:
-        # קונטיינר לבן עם טקסט שחור
         with st.container(border=True):
-            st.markdown(f"<div style='color: black;'><strong>{p['user']}</strong></div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='color: black;'>{p['post']}</div>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="direction: rtl; text-align: right; background-color: white; padding: 15px; border-radius: 10px;">
+                <h4 style="color: black; margin: 0;">{p['user']}</h4>
+                <p style="color: black; font-size: 16px; margin: 10px 0;">{p['post']}</p>
+            </div>
+            """, unsafe_allow_html=True)
             
             # הצגת תאריך פרסום
             if 'created_at' in p:
