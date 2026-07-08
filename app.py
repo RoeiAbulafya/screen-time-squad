@@ -136,34 +136,62 @@ with tab2:
     if leaderboard:
         st.dataframe(pd.DataFrame(leaderboard), width='stretch')
     
-    with st.expander("➕ Suggest a New Challenge"):
-        with st.form("add_challenge_form", clear_on_submit=True):
-            new_task = st.text_input("What is the challenge?")
-            new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
-            if st.form_submit_button("Submit Suggestion"):
-                supabase.table("challenges").insert({"task": new_task, "points": new_points}).execute()
-                st.rerun()
+    st.subheader("➕ Suggest a New Challenge")
+    with st.form("add_challenge_form", clear_on_submit=True):
+        new_task = st.text_input("What is the challenge?")
+        new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
+        if st.form_submit_button("Submit Suggestion"):
+            # שומרים גם את שם המשתמש שיצר את האתגר
+            supabase.table("challenges").insert({
+                "task": new_task, 
+                "points": new_points, 
+                "created_by": st.session_state["user_name"]
+            }).execute()
+            st.rerun()
 
     st.subheader("✅ Daily Challenges")
     challenges_data = supabase.table("challenges").select("*").execute().data
-    if "prev_selections" not in st.session_state: st.session_state["prev_selections"] = {}
+    
+    if "prev_selections" not in st.session_state: 
+        st.session_state["prev_selections"] = {}
 
     with st.form("challenges_form"):
         current_selections = {}
         for ch in challenges_data:
-            is_checked = st.checkbox(f"{ch['task']} ({ch['points']} pts)", key=f"ch_{ch['task']}")
-            current_selections[ch['task']] = (is_checked, ch['points'])
-        
+            # הצגת האתגר עם אופציית מחיקה בשורה אחת
+            col1, col2 = st.columns([0.85, 0.15])
+            with col1:
+                is_checked = st.checkbox(f"{ch['task']} ({ch['points']} pts)", 
+                                         key=f"ch_{ch['id']}", 
+                                         value=st.session_state["prev_selections"].get(ch['task'], False))
+                current_selections[ch['task']] = (is_checked, ch['points'])
+            
+            with col2:
+                # כפתור מחיקה - מופיע רק אם המשתמש הוא היוצר
+                if ch.get("created_by") == st.session_state["user_name"]:
+                    if st.form_submit_button(f"🗑️", key=f"del_ch_{ch['id']}"):
+                        supabase.table("challenges").delete().eq("id", ch['id']).execute()
+                        st.rerun()
+
         if st.form_submit_button("Update Score"):
             user = st.session_state['user_name']
-            point_change = sum(pts for task, (checked, pts) in current_selections.items() 
-                               if checked and not st.session_state["prev_selections"].get(task, False))
-            point_change -= sum(pts for task, (checked, pts) in current_selections.items() 
-                                if not checked and st.session_state["prev_selections"].get(task, False))
             
+            # חישוב שינוי נקודות:
+            # נקודות מתווספות אם סומן עכשיו ולא היה מסומן קודם
+            # נקודות יורדות אם לא מסומן עכשיו והיה מסומן קודם (Un-check)
+            point_change = 0
+            for task, (checked, pts) in current_selections.items():
+                was_checked = st.session_state["prev_selections"].get(task, False)
+                if checked and not was_checked:
+                    point_change += pts
+                elif not checked and was_checked:
+                    point_change -= pts
+            
+            # עדכון בטבלה
             curr = supabase.table("leaderboard").select("points").eq("user", user).execute().data
             if curr:
-                supabase.table("leaderboard").update({"points": curr[0]['points'] + point_change}).eq("user", user).execute()
+                new_total = curr[0]['points'] + point_change
+                supabase.table("leaderboard").update({"points": new_total}).eq("user", user).execute()
             else:
                 supabase.table("leaderboard").insert({"user": user, "points": point_change}).execute()
             
