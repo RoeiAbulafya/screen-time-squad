@@ -177,22 +177,23 @@ with tab3:
                 if comments:
                     for c in comments:
                         st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
+                
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        likes_count = c.get('likes', 0)
+                        if st.button(f"👍 Like ({likes_count})", key=f"like_{c['id']}"):
+                            supabase.table("comments").update({"likes": likes_count + 1}).eq("id", c['id']).execute()
+                            st.rerun()
+                    
+                    with col2:
+                        if c["user"] == st.session_state["user_name"]:
+                            if st.button("🗑️ Delete", key=f"del_{c['id']}"):
+                                # שימו לב: אם מוחקים פוסט, כדאי שיהיה מוגדר Cascade ב-DB,
+                                # או שמוחקים ידנית קודם את התגובות כדי למנוע שגיאות
+                                supabase.table("comments").delete().eq("id", c['id']).execute()
+                                st.rerun()
                 else:
-                    st.caption("No comments yet. Be the first!")
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                likes_count = p.get('likes', 0)
-                if st.button(f"👍 Like ({likes_count})", key=f"like_{p['id']}"):
-                    supabase.table("comments").update({"likes": likes_count + 1}).eq("id", p['id']).execute()
-                    st.rerun()
-            
-            with col2:
-                if p["user"] == st.session_state["user_name"]:
-                    if st.button("🗑️ Delete", key=f"del_{p['id']}"):
-                        # שימו לב: אם מוחקים פוסט, כדאי שיהיה מוגדר Cascade ב-DB,
-                        # או שמוחקים ידנית קודם את התגובות כדי למנוע שגיאות
-                        supabase.table("comments").delete().eq("id", p['id']).execute()
-                        st.rerun()
+                st.caption("No comments yet. Be the first!")
             # --- הוספת תגובה חדשה ---
             with st.expander("➕ Add Comment"):
                 # כל טופס חייב מפתח ייחודי משלו
