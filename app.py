@@ -154,9 +154,11 @@ with tab3:
             st.info(p['post'])
             
             # --- לייק לפוסט ---
-            liked_by = p.get('liked_by', [])
+            # במקום מה שהיה, השתמש בזה:
+            liked_by = p.get('liked_by') if p.get('liked_by') is not None else []
             is_liked = st.session_state["user_name"] in liked_by
-            
+            # במקום מה שהיה, השתמש בזה:
+
             if st.button(f"{'❤️' if is_liked else '🤍'} {len(liked_by)}", key=f"post_like_{p['id']}"):
                 if is_liked:
                     liked_by.remove(st.session_state["user_name"])
