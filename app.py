@@ -179,19 +179,7 @@ with tab3:
                         st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
                 else:
                     st.caption("No comments yet. Be the first!")
-                
-                # 3. טופס תגובה עם KEY ייחודי
-                with st.form(key=f"comm_form_{p['id']}", clear_on_submit=True):
-                    comm_text = st.text_input("Add a comment...", key=f"input_{p['id']}")
-                    if st.form_submit_button("Post Comment"):
-                        if comm_text:
-                            supabase.table("comments").insert({
-                                "post_id": p['id'], 
-                                "user": st.session_state["user_name"], 
-                                "comment": comm_text
-                            }).execute()
-                            st.rerun()
-            
+                  
             # --- הוספת תגובה חדשה ---
             with st.expander("➕ Add Comment"):
                 # כל טופס חייב מפתח ייחודי משלו
