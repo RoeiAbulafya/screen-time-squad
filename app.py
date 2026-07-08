@@ -213,14 +213,6 @@ with tab2:
             st.rerun()
 # --- TAB 3: BLOG ---
 with tab3:
-    # הגדרות עיצוב RTL
-    st.markdown("""
-    <style>
-    .stApp { direction: rtl; text-align: right; }
-    div[data-testid="stExpander"] { direction: rtl; text-align: right; }
-    </style>
-    """, unsafe_allow_html=True)
-    
     st.header("Squad Feed")
     
     # אזור פרסום פוסט חדש
@@ -237,30 +229,23 @@ with tab3:
     # משיכת פוסטים
     posts_resp = supabase.table("blog").select("*").order("created_at", desc=True).execute()
     posts = posts_resp.data if posts_resp.data else []
+
     # מעבר והצגה של כל פוסט
     for p in posts:
         with st.container(border=True):
-            st.markdown(f"""
-            <div style="direction: rtl; text-align: right; background-color: white; padding: 15px; border-radius: 10px;">
-                <h4 style="color: black; margin: 0;">{p['user']}</h4>
-                <p style="color: black; font-size: 16px; margin: 10px 0;">{p['post']}</p>
-            </div>
-            """, unsafe_allow_html=True)
+            # כותרת הפוסט - מיושרת לימין
+            st.markdown(f"### {p['user']}")
+            st.write(p['post'])
             
-            # הצגת תאריך פרסום
             if 'created_at' in p:
                 date_str = p['created_at'].replace('T', ' ').split('.')[0]
                 st.caption(f"פורסם ב: {date_str}")
             
-            # אזור פעולות: לייק, תגובות ומחיקה
+            # אזור פעולות בשורה אחת
+            cols = st.columns([0.2, 0.4, 0.4])
+            
             liked_by = p.get('liked_by') if p.get('liked_by') is not None else []
             is_liked = st.session_state["user_name"] in liked_by
-            
-            comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
-            comments = comments_resp.data if comments_resp.data else []
-            
-            # יצירת שורה לכפתורים
-            cols = st.columns([0.2, 0.3, 0.5])
             
             with cols[0]:
                 if st.button(f"{'❤️' if is_liked else '🤍'} {len(liked_by)}", key=f"post_like_{p['id']}"):
@@ -272,34 +257,32 @@ with tab3:
                     st.rerun()
             
             with cols[1]:
-                # הצגת התגובות בתוך Expander
-                with st.expander(f"💬 תגובות ({len(comments)})"):
+                # שימוש ב-Popover לתגובות - הרבה יותר נקי מ-Expander
+                comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
+                comments = comments_resp.data if comments_resp.data else []
+                
+                with st.popover(f"💬 תגובות ({len(comments)})"):
+                    st.subheader("תגובות")
                     if comments:
                         for c in comments:
-                            st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
-                            # מחיקת תגובה
+                            st.markdown(f"**{c.get('user')}**: {c.get('comment')}")
                             if c.get("user") == st.session_state["user_name"]:
                                 if st.button("🗑️", key=f"c_del_{c['id']}"):
                                     supabase.table("comments").delete().eq("id", c['id']).execute()
                                     st.rerun()
-                    else:
-                        st.caption("אין עדיין תגובות.")
                     
-                    # הוספת תגובה חדשה
-                    with st.form(f"comment_form_{p['id']}", clear_on_submit=True):
-                        new_comment = st.text_input("הוסף תגובה:")
-                        if st.form_submit_button("שלח"):
-                            if new_comment.strip():
-                                supabase.table("comments").insert({
-                                    "post_id": p['id'], 
-                                    "user": st.session_state["user_name"], 
-                                    "comment": new_comment.strip(),
-                                    "liked_by": []
-                                }).execute()
-                                st.rerun()
+                    # הוספת תגובה בתוך ה-popover
+                    new_comment = st.text_input("הוסף תגובה...", key=f"input_{p['id']}")
+                    if st.button("שלח", key=f"btn_{p['id']}"):
+                        if new_comment.strip():
+                            supabase.table("comments").insert({
+                                "post_id": p['id'], 
+                                "user": st.session_state["user_name"], 
+                                "comment": new_comment.strip()
+                            }).execute()
+                            st.rerun()
 
             with cols[2]:
-                # מחיקת פוסט
                 if p["user"] == st.session_state["user_name"]:
                     if st.button("🗑️ מחק פוסט", key=f"del_{p['id']}"):
                         supabase.table("blog").delete().eq("id", p['id']).execute()
