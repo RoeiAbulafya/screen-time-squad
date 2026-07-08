@@ -168,16 +168,29 @@ with tab3:
                         supabase.table("blog").delete().eq("id", p['id']).execute()
                         st.rerun()
             
-            # --- הצגת תגובות קיימות ---
-            # סינון תגובות ששייכות רק לפוסט הספציפי הזה
-            post_comments = [
-                c for c in all_comments 
-                if isinstance(c, dict) and c.get('post_id') == p['id']
-                ]
-            if post_comments:
-                with st.expander(f"💬 View Comments ({len(post_comments)})"):
-                    for c in post_comments:
-                        st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
+            with st.expander(f"💬 View/Add Comments"):
+            # 1. שליפה ישירה של התגובות לפוסט הזה בלבד (יותר יעיל מסינון ברשימה גדולה)
+            comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
+            comments = comments_resp.data if comments_resp.data else []
+            
+            # 2. הצגת התגובות הקיימות
+            if comments:
+                for c in comments:
+                    st.caption(f"**{c.get('user', 'Unknown')}**: {c.get('comment', '')}")
+            else:
+                st.caption("No comments yet. Be the first!")
+            
+            # 3. טופס תגובה עם KEY ייחודי
+            with st.form(key=f"comm_form_{p['id']}", clear_on_submit=True):
+                comm_text = st.text_input("Add a comment...", key=f"input_{p['id']}")
+                if st.form_submit_button("Post Comment"):
+                    if comm_text:
+                        supabase.table("comments").insert({
+                            "post_id": p['id'], 
+                            "user": st.session_state["user_name"], 
+                            "comment": comm_text
+                        }).execute()
+                        st.rerun()
             
             # --- הוספת תגובה חדשה ---
             with st.expander("➕ Add Comment"):
