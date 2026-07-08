@@ -136,19 +136,6 @@ with tab2:
     if leaderboard:
         st.dataframe(pd.DataFrame(leaderboard), width='stretch')
     
-    st.subheader("➕ Suggest a New Challenge")
-    with st.form("add_challenge_form", clear_on_submit=True):
-        new_task = st.text_input("What is the challenge?")
-        new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
-        if st.form_submit_button("Submit Suggestion"):
-            # שומרים גם את שם המשתמש שיצר את האתגר
-            supabase.table("challenges").insert({
-                "task": new_task, 
-                "points": new_points, 
-                "created_by": st.session_state["user_name"]
-            }).execute()
-            st.rerun()
-
     st.subheader("✅ Daily Challenges")
     challenges_data = supabase.table("challenges").select("*").execute().data
     
@@ -197,7 +184,18 @@ with tab2:
             
             st.session_state["prev_selections"] = {k: v[0] for k, v in current_selections.items()}
             st.rerun()
-
+    st.subheader("➕ Suggest a New Challenge")
+        with st.form("add_challenge_form", clear_on_submit=True):
+            new_task = st.text_input("What is the challenge?")
+            new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
+            if st.form_submit_button("Submit Suggestion"):
+                # שומרים גם את שם המשתמש שיצר את האתגר
+                supabase.table("challenges").insert({
+                    "task": new_task, 
+                    "points": new_points, 
+                    "created_by": st.session_state["user_name"]
+                }).execute()
+                st.rerun()
 # --- TAB 3: BLOG ---
 with tab3:
     st.header("Squad Feed")
