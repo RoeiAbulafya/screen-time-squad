@@ -46,7 +46,12 @@ with tab1:
     
     app_logs = {app: st.number_input(f"{app} (hours):", min_value=0.0, max_value=24.0, step=0.1) 
                 for app in st.session_state["tracked_apps"]}
-
+    st.subheader("Add New App to Track")
+    new_app = st.text_input("App Name:")
+    if st.button("Add App"):
+        if new_app not in st.session_state["tracked_apps"]:
+            st.session_state["tracked_apps"].append(new_app)
+            st.rerun()
     if st.button("Save Daily Log"):
         existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
 
@@ -67,7 +72,34 @@ with tab1:
     st.divider()
     st.subheader("Squad Progress Chart") 
     logs = supabase.table("logs").select("*").execute().data
+    st.divider()
+    st.subheader("Daily App Breakdown")
     
+    # שליפת נתוני היום האחרון מכל המשתמשים
+    today = str(datetime.now().date())
+    logs = supabase.table("logs").select("*").eq("date", today).execute().data
+    
+    if logs:
+        # נבנה DataFrame שמתאים לגרף מוערם
+        # נניח ש-logs מכיל עמודה 'app_data' שהיא JSON
+        chart_data = []
+        for log in logs:
+            app_data = log.get('app_data', {})
+            for app, duration in app_data.items():
+                if duration > 0:
+                    chart_data.append({"user": log['user'], "app": app, "duration": duration})
+        
+        df_apps = pd.DataFrame(chart_data)
+        
+        if not df_apps.empty:
+            fig = px.bar(df_apps, x="duration", y="user", color="app", 
+                         orientation='h', barmode='stack',
+                         title="App Usage Today by Squad Members")
+            st.plotly_chart(fig, width='stretch')
+        else:
+            st.write("No app data logged for today yet.")
+    else:
+        st.write("No logs for today.")
     if logs:
         df = pd.DataFrame(logs)
         df['user'] = df['user'].str.strip() # ניקוי רווחים מהשמות
