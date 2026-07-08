@@ -9,7 +9,7 @@ st.set_page_config(page_title="Screen Time Squad", layout="centered")
 # --- INITIALIZATION ---
 if "user_name" not in st.session_state: st.session_state["user_name"] = None
 if "tracked_apps" not in st.session_state:
-    st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook", "TikTok"]
+    st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
 
 # --- SUPABASE CONNECTION ---
 @st.cache_resource
@@ -58,17 +58,19 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blo
 # --- TAB 1: DASHBOARD ---
 with tab1:
     st.header("Log Your Time")
+    log_date = st.date_input("Date")
     
-    # 1. קלט זמן מסך כללי בשורה אחת
+    # 1. קלט זמן מסך כללי בשתי עמודות
     col_h, col_m = st.columns(2)
     with col_h:
         hours_input = st.number_input("Total Hours:", min_value=0, max_value=24, step=1)
     with col_m:
         minutes_input = st.number_input("Total Minutes:", min_value=0, max_value=59, step=1)
     
+    st.divider()
     st.subheader("App Breakdown")
-    
-    # 2. קלט לכל אפליקציה - שעות ודקות זה לצד זה
+
+    # 2. לולאת קלט לאפליקציות - שעות ודקות זה לצד זה
     app_logs = {}
     for app in st.session_state["tracked_apps"]:
         st.markdown(f"**{app}**")
@@ -77,30 +79,40 @@ with tab1:
             h = st.number_input(f"{app} (Hours):", min_value=0, max_value=24, step=1, key=f"{app}_h")
         with c2:
             m = st.number_input(f"{app} (Minutes):", min_value=0, max_value=59, step=1, key=f"{app}_m")
-        
-        # המרה לערך עשרוני עבור הגרף (למשל: 1.5 שעות)
         app_logs[app] = h + (m / 60)
 
+    # 3. הוספת אפליקציה חדשה
+    st.subheader("➕ Add New App")
+    new_app = st.text_input("New App Name:")
+    if st.button("Add App"):
+        if new_app and new_app not in st.session_state["tracked_apps"]:
+            st.session_state["tracked_apps"].append(new_app)
+            st.rerun()
+
+    # 4. שמירת נתונים
     if st.button("Save Daily Log"):
-        # ... (קוד השמירה נשאר אותו דבר) ...
         existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
         if existing_log:
             supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
-        data_to_insert = {"date": str(log_date), "user": st.session_state["user_name"], "hours": hours_input, "minutes": minutes_input, "app_data": app_logs}
+            
+        data_to_insert = {
+            "date": str(log_date), 
+            "user": st.session_state["user_name"], 
+            "hours": hours_input, 
+            "minutes": minutes_input, 
+            "app_data": app_logs
+        }
         supabase.table("logs").insert(data_to_insert).execute()
         st.success("Log saved!")
         st.rerun()
 
     st.divider()
     
-    # 1. שליפת כל הנתונים לגרף הקווי (Squad Progress)
+    # 5. הצגת הגרפים
     all_logs = supabase.table("logs").select("*").execute().data
-    
-    # 2. שליפת נתוני היום בלבד (לגרף האפליקציות)
     today = str(datetime.now().date())
     logs_today = [l for l in all_logs if l['date'] == today]
-    
-    # --- גרף אפליקציות יומי ---
+
     st.subheader("Daily App Breakdown")
     if logs_today:
         chart_data = []
@@ -112,37 +124,14 @@ with tab1:
         
         df_apps = pd.DataFrame(chart_data)
         if not df_apps.empty:
-        # 1. הגדרת פלטת צבעים אישית (אפשר להוסיף עוד צבעים)
-            color_map = {
-                "Instagram": "#E1306C", "YouTube": "#FF0000", 
-                "Reddit": "#FF4500", "TikTok": "#00F2EA",
-                "Facebook": "#4267B2"
-            }
-        
             fig_apps = px.bar(df_apps, x="duration", y="user", color="app", 
-                            orientation='h', barmode='stack',
-                            color_discrete_map=color_map, # שימוש בצבעים מוגדרים
-                            template="plotly_white") # רקע נקי
-
-            # 2. עיצוב העמודות (דק יותר)
-            fig_apps.update_traces(width=0.4) # שולט בעובי העמודה
-
-            # 3. ניקוי העיצוב (להעיף צירים מיותרים שנותנים מראה של "דוח")
-            fig_apps.update_layout(
-                height=200, # גובה קטן לגרף דק
-                margin=dict(l=0, r=0, t=30, b=0),
-                xaxis_title=None,
-                yaxis_title=None,
-                showlegend=True
-            )
-        
-            st.plotly_chart(fig_apps, width='stretch')
+                             orientation='h', barmode='stack', title="App Usage Today")
+            fig_apps.update_traces(width=0.4)
+            st.plotly_chart(fig_apps, use_container_width=True)
     else:
         st.write("No app data logged for today.")
 
     st.divider()
-
-    # --- גרף קווי (Squad Progress Chart) ---
     st.subheader("Squad Progress Chart") 
     if all_logs:
         df = pd.DataFrame(all_logs)
@@ -153,9 +142,8 @@ with tab1:
         
         fig_line = px.line(df, x='date', y='total_time', color='user', 
                           markers=True, title="Screen Time by User (Total Hours)")
-        st.plotly_chart(fig_line, width='stretch')
-    else:
-        st.write("No log data to display yet.")
+        st.plotly_chart(fig_line, use_container_width=True)
+        
 # --- TAB 2: CHALLENGES ---
 with tab2:
     st.header("🏆 Leaderboard")
