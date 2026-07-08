@@ -82,7 +82,7 @@ with tab1:
         fig = px.line(df, x='date', y='total_time', color='user', 
                       markers=True, title="Screen Time by User (Total Hours)")
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch') #st.dataframe(df, width='stretch')  or st.plotly_chart(fig, width='stretch')
     else:
         st.write("No log data to display yet.")
 
@@ -91,7 +91,7 @@ with tab2:
     st.header("🏆 Leaderboard")
     leaderboard = supabase.table("leaderboard").select("*").order("points", desc=True).execute().data
     if leaderboard:
-        st.dataframe(pd.DataFrame(leaderboard), use_container_width=True)
+        st.dataframe(pd.DataFrame(leaderboard), width='stretch')
     
     with st.expander("➕ Suggest a New Challenge"):
         with st.form("add_challenge_form", clear_on_submit=True):
@@ -141,8 +141,8 @@ with tab3:
 
     # משיכת כל הפוסטים וכל התגובות במקביל כדי לייעל זמני טעינה
     posts = supabase.table("blog").select("*").order("created_at", desc=True).execute().data
-    all_comments_response = supabase.table("comments").select("*").order("created_at", asc=True).execute().data
-    
+    all_comments_response = supabase.table("comments").select("*").order("created_at", desc=False).execute()
+    all_comments = all_comments_response.data if all_comments_response.data else []
     # הבטחה שיש לנו רשימה גם אם הטבלה ריקה
     all_comments = all_comments_response if all_comments_response else []
 
