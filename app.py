@@ -108,6 +108,8 @@ with tab1:
 
     st.divider()
     
+    st.divider()
+    
     # 5. הצגת הגרפים
     all_logs = supabase.table("logs").select("*").execute().data
     today = str(datetime.now().date())
@@ -115,22 +117,61 @@ with tab1:
 
     st.subheader("Daily App Breakdown")
     if logs_today:
-        chart_data = []
         for log in logs_today:
+            user = log['user']
+            tot_h = log.get('hours', 0)
+            tot_m = log.get('minutes', 0)
+            
+            # כותרת שם המשתמש וזמן כולל בגדול (כמו בתמונה)
+            st.markdown(f"**{user}**")
+            st.markdown(f"<h1 style='margin-top: -15px; margin-bottom: 0px;'>{tot_h}h {tot_m}m</h1>", unsafe_allow_html=True)
+
             app_data = log.get('app_data', {})
-            for app, duration in app_data.items():
-                if duration > 0:
-                    chart_data.append({"user": log['user'], "app": app, "duration": duration})
-        
-        df_apps = pd.DataFrame(chart_data)
-        if not df_apps.empty:
-            fig_apps = px.bar(df_apps, x="duration", y="user", color="app", 
-                             orientation='h', barmode='stack', title="App Usage Today")
-            fig_apps.update_traces(width=0.4)
-            st.plotly_chart(fig_apps, use_container_width=True)
+            # הכנת הנתונים לגרף
+            chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
+            
+            if chart_data:
+                df_apps = pd.DataFrame(chart_data)
+                
+                # יצירת הגרף האופקי
+                fig_apps = px.bar(df_apps, x="duration", y="user", color="app", orientation='h')
+                
+                # עיצוב מינימליסטי ודק
+                fig_apps.update_traces(width=0.15, marker_line_width=0) # עובי דק וללא מסגרת לעמודות
+                
+                fig_apps.update_layout(
+                    height=80, # גובה קטן מאוד שיוצר מראה של פס טעינה
+                    margin=dict(l=0, r=0, t=10, b=0), # הסרת שוליים מיותרים
+                    paper_bgcolor="rgba(0,0,0,0)", # רקע שקוף
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), # העלמת ציר X
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), # העלמת ציר Y
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h", # מקרא אופקי
+                        yanchor="top",
+                        y=-0.2,
+                        xanchor="left",
+                        x=0,
+                        title="",
+                        font=dict(size=11)
+                    )
+                )
+                
+                # הצגת הגרף ללא סרגל הכלים של Plotly (למראה נקי יותר)
+                st.plotly_chart(fig_apps, use_container_width=True, config={'displayModeBar': False})
+                
+                # הוספת שורת הטקסט עם הפירוט (לדוגמה: IG 45m · Facebook 7m)
+                breakdown_strs = []
+                for _, row in df_apps.iterrows():
+                    mins = int(row['duration'] * 60)
+                    breakdown_strs.append(f"{row['app']} {mins}m")
+                
+                st.markdown(f"<div style='font-size: 12px; color: #a0a0a0; margin-top: -15px;'>{' · '.join(breakdown_strs)}</div>", unsafe_allow_html=True)
+                
+            st.divider() # קו הפרדה בין משתמש למשתמש
     else:
         st.write("No app data logged for today.")
-
     st.divider()
     st.subheader("Squad Progress Chart") 
     if all_logs:
