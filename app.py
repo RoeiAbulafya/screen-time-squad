@@ -35,7 +35,8 @@ if not st.session_state["user_name"]:
         if st.button("Get Started 🚀"):
             if name.strip():
                 st.session_state["user_name"] = name.strip().capitalize()
-                st.rerun()  
+                st.rerun() 
+    st.stop()
 
 # --- TOP BAR ---
 st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
