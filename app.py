@@ -20,10 +20,6 @@ supabase = init_supabase()
 
 # --- LOGIN ---
 if not st.session_state["user_name"]:
-    # שימוש ב-Columns כדי לסדר את המידע בצורה מודרנית
-    col_text, col_chart = st.columns([1, 1])
-
-    with col_text:
         st.title("👋 Welcome to Screen Time Squad!")
         st.markdown("""
         **Ready to take back your time?** 
