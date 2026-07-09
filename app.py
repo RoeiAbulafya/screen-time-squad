@@ -72,12 +72,12 @@ user_streak = calculate_streak(st.session_state["user_name"], supabase.table("lo
 st.markdown(f"### Connected as: **{st.session_state['user_name']}** 🔥 {user_streak} days in a row!")
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog", "💡 Insights"])
 
-# --- TAB 1: DASHBOARD (חלק הזנת הנתונים המתוקן) ---
+# --- TAB 1: DASHBOARD (גרסה עם סנכרון אפליקציות היסטוריות) ---
 with tab1:
     st.header("Log Your Time")
     log_date = st.date_input("Date")
     
-    # --- פיצ'ר תיקון הדריסה: שליפת נתונים קיימים לתאריך הנבחר ---
+    # שליפת נתונים קיימים לתאריך הנבחר
     existing_user_log = supabase.table("logs").select("*").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
     
     if existing_user_log:
@@ -85,16 +85,20 @@ with tab1:
         default_hours = int(current_log.get('hours', 0))
         default_minutes = int(current_log.get('minutes', 0))
         existing_apps = current_log.get('app_data', {})
+        
+        # --- הפיצ'ר החדש: הוספת אפליקציות מהעבר לרשימה הנוכחית ---
+        for app_name in existing_apps.keys():
+            if app_name not in st.session_state["tracked_apps"]:
+                st.session_state["tracked_apps"].append(app_name)
+        # --------------------------------------------------------
     else:
         default_hours = 0
         default_minutes = 0
         existing_apps = {}
-    # -------------------------------------------------------
 
-    # 1. קלט זמן מסך כללי בשתי עמודות (עם ערכי ברירת המחדל שנשלפו)
+    # 1. קלט זמן מסך כללי
     col_h, col_m = st.columns(2)
     with col_h:
-        # שימוש ב-key דינמי שכולל את התאריך מאלץ את Streamlit להתרענן כשמחליפים יום
         hours_input = st.number_input("Total Hours:", min_value=0, max_value=24, step=1, value=default_hours, key=f"total_h_{log_date}")
     with col_m:
         minutes_input = st.number_input("Total Minutes:", min_value=0, max_value=59, step=1, value=default_minutes, key=f"total_m_{log_date}")
@@ -105,12 +109,11 @@ with tab1:
     if "TikTok" in st.session_state["tracked_apps"]:
         st.session_state["tracked_apps"].remove("TikTok")
 
-    # 2. לולאת קלט לאפליקציות - שעות ודקות זה לצד זה
+    # 2. לולאת קלט לאפליקציות (כוללת כעת גם את האפליקציות שנשלפו מההיסטוריה של אותו יום)
     app_logs = {}
     for app in st.session_state["tracked_apps"]:
         st.markdown(f"**{app}**")
         
-        # המרה של זמן האפליקציה השמור (שבר עשרוני) בחזרה לשעות ודקות עבור התיבות
         app_total_hours = existing_apps.get(app, 0.0)
         app_default_h = int(app_total_hours)
         app_default_m = int(round((app_total_hours - app_default_h) * 60))
@@ -122,7 +125,7 @@ with tab1:
             m = st.number_input(f"{app} (Minutes):", min_value=0, max_value=59, step=1, value=app_default_m, key=f"{app}_m_{log_date}")
         app_logs[app] = h + (m / 60)
 
-    # 3. הוספת אפליקציה חדשה
+    # 3. הוספת אפליקציה חדשה ליום הנוכחי
     st.subheader("➕ Add New App")
     new_app = st.text_input("New App Name:")
     if st.button("Add App"):
@@ -130,7 +133,7 @@ with tab1:
             st.session_state["tracked_apps"].append(new_app)
             st.rerun()
 
-    # 4. שמירת נתונים (נשארת אותה לוגיקה, אך כעת בטוחה לחלוטין מדריסה!)
+    # 4. שמירת נתונים
     if st.button("Save Daily Log"):
         existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
         if existing_log:
