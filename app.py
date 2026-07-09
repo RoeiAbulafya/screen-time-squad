@@ -122,66 +122,92 @@ with tab1:
     st.divider()
     
     # --- 5. הצגת הגרפים עם בחירת תאריך מותאמת ---
-    all_logs = supabase.table("logs").select("*").execute().data
+all_logs = supabase.table("logs").select("*").execute().data
 
-    st.subheader("Daily App Breakdown")
+st.subheader("Daily App Breakdown")
+
+if all_logs:
+    available_dates = sorted(list(set([l['date'] for l in all_logs])), reverse=True)
+    selected_date = st.selectbox("Select Date:", options=available_dates)
     
-    if all_logs:
-        available_dates = sorted(list(set([l['date'] for l in all_logs])), reverse=True)
-        selected_date = st.selectbox("Select Date:", options=available_dates)
-        
-        logs_for_date = [l for l in all_logs if l['date'] == selected_date]
+    logs_for_date = [l for l in all_logs if l['date'] == selected_date]
 
-        if logs_for_date:
-            for log in logs_for_date:
-                user = log['user']
-                tot_h = log.get('hours', 0)
-                tot_m = log.get('minutes', 0)
-                
-                st.markdown(f"**{user}**")
-                st.markdown(f"<h1 style='margin-top: -15px; margin-bottom: 0px;'>{tot_h}h {tot_m}m</h1>", unsafe_allow_html=True)
+    if logs_for_date:
+        for log in logs_for_date:
+            user = log['user']
+            tot_h = log.get('hours', 0)
+            tot_m = log.get('minutes', 0)
+            
+            # חישוב סך כל זמן המסך שהוזן (ה-100% של הבר)
+            total_screen_time = tot_h + (tot_m / 60)
+            
+            st.markdown(f"**{user}**")
+            st.markdown(f"<h1 style='margin-top: -15px; margin-bottom: 0px;'>{tot_h}h {tot_m}m</h1>", unsafe_allow_html=True)
 
-                app_data = log.get('app_data', {})
-                chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
+            app_data = log.get('app_data', {})
+            
+            # 1. בניית רשימת האפליקציות הרגילות שהוזנו
+            chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
+            
+            # חישוב סך הזמן שנאכל על ידי אפליקציות מוגדרות
+            total_apps_time = sum(duration for duration in app_data.values() if duration > 0)
+            
+            # 2. חישוב השארית עבור ה-Other
+            other_time = total_screen_time - total_apps_time
+            if other_time > 0.01:  # הגנה מפני שברים קטנים של פלואוט
+                chart_data.append({"app": "Other", "duration": other_time, "user": ""})
+            
+            if chart_data:
+                df_apps = pd.DataFrame(chart_data)
                 
-                if chart_data:
-                    df_apps = pd.DataFrame(chart_data)
-                    fig_apps = px.bar(df_apps, x="duration", y="user", color="app", orientation='h')
-                    fig_apps.update_traces(width=0.15, marker_line_width=0) 
-                    
-                    fig_apps.update_layout(
-                        height=80, 
-                        margin=dict(l=0, r=0, t=10, b=0), 
-                        paper_bgcolor="rgba(0,0,0,0)", 
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
-                        showlegend=True,
-                        legend=dict(
-                            orientation="h", 
-                            yanchor="top",
-                            y=-0.2,
-                            xanchor="left",
-                            x=0,
-                            title="",
-                            font=dict(size=11)
-                        )
+                # יצירת הגרף עם מיפוי צבעים ספציפי ל-Other כדי שיהיה אפור
+                fig_apps = px.bar(
+                    df_apps, 
+                    x="duration", 
+                    y="user", 
+                    color="app", 
+                    orientation='h',
+                    color_discrete_map={'Other': '#5a5a62'} # צבע אפור כהה ואלגנטי ל-Other
+                )
+                
+                fig_apps.update_traces(width=0.15, marker_line_width=0) 
+                
+                fig_apps.update_layout(
+                    height=80, 
+                    margin=dict(l=0, r=0, t=10, b=0), 
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
+                    yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h", 
+                        yanchor="top",
+                        y=-0.2,
+                        xanchor="left",
+                        x=0,
+                        title="",
+                        font=dict(size=11)
                     )
-                    
-                    st.plotly_chart(fig_apps, use_container_width=True, config={'displayModeBar': False})
-                    
-                    breakdown_strs = []
-                    for _, row in df_apps.iterrows():
+                )
+                
+                st.plotly_chart(fig_apps, use_container_width=True, config={'displayModeBar': False})
+                
+                # שורת טקסט פירוט מתחת לבר (בלי להציג את Other בטקסט השורתי)
+                breakdown_strs = []
+                for _, row in df_apps.iterrows():
+                    if row['app'] != 'Other':
                         mins = int(row['duration'] * 60)
                         breakdown_strs.append(f"{row['app']} {mins}m")
-                    
+                
+                if breakdown_strs:
                     st.markdown(f"<div style='font-size: 12px; color: #a0a0a0; margin-top: -15px;'>{' · '.join(breakdown_strs)}</div>", unsafe_allow_html=True)
-                    
-                st.divider() 
-        else:
-            st.write("No app data logged for this date.")
+                
+            st.divider() 
     else:
-        st.info("No logs available in the system yet.")
+        st.write("No app data logged for this date.")
+else:
+    st.info("No logs available in the system yet.")
         
     st.divider()
     st.subheader("Squad Progress Chart") 
@@ -200,7 +226,7 @@ with tab1:
 with tab2:
     st.header("🏆 Squad Challenges")
     
-    SQUAD_WEEKLY_GOAL = 50.0
+    SQUAD_WEEKLY_GOAL = 100.0
     
     total_squad_hours = 0
     for log in all_logs:
