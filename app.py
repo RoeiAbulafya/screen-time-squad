@@ -20,10 +20,8 @@ supabase = init_supabase()
 
 # --- LOGIN ---
 if not st.session_state["user_name"]:
-    # עיצוב מרכזי וממוקד
     st.title("👋 Welcome to Screen Time Squad!")
     
-    # שימוש ב-Container למראה נקי
     with st.container():
         st.markdown("""
         ### Ready to take back your time? 
@@ -45,14 +43,15 @@ if not st.session_state["user_name"]:
                     st.session_state["user_name"] = name.strip().capitalize()
                     st.rerun()
         
-    st.stop()     
+    st.stop()    
 
 # --- TOP BAR ---
 st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
 users_data = supabase.table("logs").select("user").execute().data
 unique_users = sorted(list(set([u['user'] for u in users_data]))) if users_data else []
 st.caption(f"Squad Members: {', '.join(unique_users) if unique_users else 'Be the first to join!'}")
-# --- לוגיקת חישוב STREAK ---
+
+# --- STREAK LOGIC ---
 def calculate_streak(user_name, all_logs):
     user_dates = sorted([log['date'] for log in all_logs if log['user'] == user_name], reverse=True)
     if not user_dates:
@@ -63,14 +62,12 @@ def calculate_streak(user_name, all_logs):
     
     for log_date_str in user_dates:
         log_date = datetime.strptime(log_date_str, "%Y-%m-%d").date()
-        # בודקים אם הלוג הוא מהיום או אתמול (כדי לא לאפס את הסטריק אם עוד לא הזין היום)
         if (current_date - log_date).days == streak or (current_date - log_date).days == streak + 1:
             streak += 1
         else:
             break
     return streak
 
-# הצגה מתחת לכותרת הראשית או בתפריט הצד
 user_streak = calculate_streak(st.session_state["user_name"], supabase.table("logs").select("*").execute().data)
 st.markdown(f"### Connected as: **{st.session_state['user_name']}** 🔥 {user_streak} days in a row!")
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🏆 Challenges", "📝 Squad Blog", "💡 Insights"])
@@ -80,7 +77,6 @@ with tab1:
     st.header("Log Your Time")
     log_date = st.date_input("Date")
     
-    # 1. קלט זמן מסך כללי בשתי עמודות
     col_h, col_m = st.columns(2)
     with col_h:
         hours_input = st.number_input("Total Hours:", min_value=0, max_value=24, step=1)
@@ -90,7 +86,6 @@ with tab1:
     st.divider()
     st.subheader("App Breakdown")
 
-    # 2. לולאת קלט לאפליקציות - שעות ודקות זה לצד זה
     app_logs = {}
     for app in st.session_state["tracked_apps"]:
         st.markdown(f"**{app}**")
@@ -101,7 +96,6 @@ with tab1:
             m = st.number_input(f"{app} (Minutes):", min_value=0, max_value=59, step=1, key=f"{app}_m")
         app_logs[app] = h + (m / 60)
 
-    # 3. הוספת אפליקציה חדשה
     st.subheader("➕ Add New App")
     new_app = st.text_input("New App Name:")
     if st.button("Add App"):
@@ -109,7 +103,6 @@ with tab1:
             st.session_state["tracked_apps"].append(new_app)
             st.rerun()
 
-    # 4. שמירת נתונים
     if st.button("Save Daily Log"):
         existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
         if existing_log:
@@ -128,19 +121,15 @@ with tab1:
 
     st.divider()
     
-    # 5. הצגת הגרפים
+    # --- 5. הצגת הגרפים עם בחירת תאריך מותאמת ---
     all_logs = supabase.table("logs").select("*").execute().data
 
     st.subheader("Daily App Breakdown")
     
     if all_logs:
-        # חילוץ כל התאריכים הייחודיים שיש בהם דיווחים, ומיון מהחדש לישן
         available_dates = sorted(list(set([l['date'] for l in all_logs])), reverse=True)
-        
-        # הוספת תיבת בחירה - ברירת המחדל תהיה התאריך האחרון (לרוב היום)
         selected_date = st.selectbox("Select Date:", options=available_dates)
         
-        # סינון הלוגים רק לתאריך שנבחר מהרשימה
         logs_for_date = [l for l in all_logs if l['date'] == selected_date]
 
         if logs_for_date:
@@ -149,21 +138,15 @@ with tab1:
                 tot_h = log.get('hours', 0)
                 tot_m = log.get('minutes', 0)
                 
-                # כותרת שם המשתמש וזמן כולל בגדול (כמו בתמונה)
                 st.markdown(f"**{user}**")
                 st.markdown(f"<h1 style='margin-top: -15px; margin-bottom: 0px;'>{tot_h}h {tot_m}m</h1>", unsafe_allow_html=True)
 
                 app_data = log.get('app_data', {})
-                # הכנת הנתונים לגרף
                 chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
                 
                 if chart_data:
                     df_apps = pd.DataFrame(chart_data)
-                    
-                    # יצירת הגרף האופקי
                     fig_apps = px.bar(df_apps, x="duration", y="user", color="app", orientation='h')
-                    
-                    # עיצוב מינימליסטי ודק
                     fig_apps.update_traces(width=0.15, marker_line_width=0) 
                     
                     fig_apps.update_layout(
@@ -199,6 +182,8 @@ with tab1:
             st.write("No app data logged for this date.")
     else:
         st.info("No logs available in the system yet.")
+        
+    st.divider()
     st.subheader("Squad Progress Chart") 
     if all_logs:
         df = pd.DataFrame(all_logs)
@@ -215,27 +200,22 @@ with tab1:
 with tab2:
     st.header("🏆 Squad Challenges")
     
-    # אתגר קבוצתי שבועי (דוגמה: כולם יחד מתחת ל-50 שעות שבועיות)
     SQUAD_WEEKLY_GOAL = 50.0
     
-    # חישוב כל השעות של כל הקבוצה בשבוע האחרון (לצורך הפשטות כאן נסכום את כל הלוגים הקיימים, 
-    # בהמשך תוכל לסנן לפי 7 הימים האחרונים)
     total_squad_hours = 0
     for log in all_logs:
         total_squad_hours += log.get('hours', 0) + (log.get('minutes', 0) / 60)
         
     st.subheader("🤝 Group's Co-op Challenge:")
-    st.markdown(f"**Weekly goal: Keep the total screen time under - {int(SQUAD_WEEKLY_GOAL)} hours")
+    st.markdown(f"**Weekly goal: Keep the total screen time under {int(SQUAD_WEEKLY_GOAL)} hours**")
     
-    # חישוב אחוז ההתקדמות (כדי לא לחרוג מ-1.0 ב-Progress Bar)
     progress_val = min(total_squad_hours / SQUAD_WEEKLY_GOAL, 1.0)
     
-    # שינוי צבע הבר בהתאם למצב - אם מתקרבים ליעד זה נהיה מסוכן (צבע אדום)
     if progress_val > 0.8:
-        st.warning(f" Watch out! We're gettiong dangerously close to our daily limit! We're currently on- {int(total_squad_hours)} hours")
+        st.warning(f"Watch out! We're getting dangerously close to our weekly limit! We're currently at {int(total_squad_hours)} hours")
         st.progress(progress_val)
     else:
-        st.success(f" We're doing fine! We are currently on {int(total_squad_hours)} hours out of {int(SQUAD_WEEKLY_GOAL)}.")
+        st.success(f"We're doing fine! We are currently at {int(total_squad_hours)} hours out of {int(SQUAD_WEEKLY_GOAL)}.")
         st.progress(progress_val)
     
     st.divider()
@@ -253,7 +233,6 @@ with tab2:
     with st.form("challenges_form"):
         current_selections = {}
         for ch in challenges_data:
-            # הצגת האתגר עם אופציית מחיקה בשורה אחת
             col1, col2 = st.columns([0.85, 0.15])
             with col1:
                 is_checked = st.checkbox(f"{ch['task']} ({ch['points']} pts)", 
@@ -262,7 +241,6 @@ with tab2:
                 current_selections[ch['task']] = (is_checked, ch['points'])
             
             with col2:
-                # כפתור מחיקה - מופיע רק אם המשתמש הוא היוצר
                 if ch.get("created_by") == st.session_state["user_name"]:
                     if st.form_submit_button(f"🗑️", key=f"del_ch_{ch['id']}"):
                         supabase.table("challenges").delete().eq("id", ch['id']).execute()
@@ -270,10 +248,6 @@ with tab2:
 
         if st.form_submit_button("Update Score"):
             user = st.session_state['user_name']
-            
-            # חישוב שינוי נקודות:
-            # נקודות מתווספות אם סומן עכשיו ולא היה מסומן קודם
-            # נקודות יורדות אם לא מסומן עכשיו והיה מסומן קודם (Un-check)
             point_change = 0
             for task, (checked, pts) in current_selections.items():
                 was_checked = st.session_state["prev_selections"].get(task, False)
@@ -282,7 +256,6 @@ with tab2:
                 elif not checked and was_checked:
                     point_change -= pts
             
-            # עדכון בטבלה
             curr = supabase.table("leaderboard").select("points").eq("user", user).execute().data
             if curr:
                 new_total = curr[0]['points'] + point_change
@@ -292,26 +265,26 @@ with tab2:
             
             st.session_state["prev_selections"] = {k: v[0] for k, v in current_selections.items()}
             st.rerun()
+            
     st.subheader("➕ Suggest a New Challenge")
     with st.form("add_challenge_form", clear_on_submit=True):
         new_task = st.text_input("What is the challenge?")
         new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
         if st.form_submit_button("Submit Suggestion"):
-                # שומרים גם את שם המשתמש שיצר את האתגר
             supabase.table("challenges").insert({
                 "task": new_task, 
                 "points": new_points, 
                 "created_by": st.session_state["user_name"]
             }).execute()
             st.rerun()
+
 # --- TAB 3: BLOG ---
 with tab3:
     st.header("Squad Feed")
     
-    # אזור פרסום פוסט חדש
     with st.form("blog_form", clear_on_submit=True):
-        post = st.text_area("שתף מחשבה:")
-        if st.form_submit_button("פרסם") and post:
+        post = st.text_area("Share a thought:")
+        if st.form_submit_button("Post") and post:
             supabase.table("blog").insert({
                 "user": st.session_state["user_name"], 
                 "post": post, 
@@ -319,22 +292,18 @@ with tab3:
             }).execute()
             st.rerun()
 
-    # משיכת פוסטים
     posts_resp = supabase.table("blog").select("*").order("created_at", desc=True).execute()
     posts = posts_resp.data if posts_resp.data else []
 
-    # מעבר והצגה של כל פוסט
     for p in posts:
         with st.container(border=True):
-            # כותרת הפוסט - מיושרת לימין
             st.markdown(f"### {p['user']}")
             st.write(p['post'])
             
             if 'created_at' in p:
                 date_str = p['created_at'].replace('T', ' ').split('.')[0]
-                st.caption(f"פורסם ב: {date_str}")
+                st.caption(f"Posted at: {date_str}")
             
-            # אזור פעולות בשורה אחת
             cols = st.columns([0.2, 0.4, 0.4])
             
             liked_by = p.get('liked_by') if p.get('liked_by') is not None else []
@@ -350,12 +319,11 @@ with tab3:
                     st.rerun()
             
             with cols[1]:
-                # שימוש ב-Popover לתגובות - הרבה יותר נקי מ-Expander
                 comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
                 comments = comments_resp.data if comments_resp.data else []
                 
-                with st.popover(f"💬 תגובות ({len(comments)})"):
-                    st.subheader("תגובות")
+                with st.popover(f"💬 Comments ({len(comments)})"):
+                    st.subheader("Comments")
                     if comments:
                         for c in comments:
                             st.markdown(f"**{c.get('user')}**: {c.get('comment')}")
@@ -364,9 +332,8 @@ with tab3:
                                     supabase.table("comments").delete().eq("id", c['id']).execute()
                                     st.rerun()
                     
-                    # הוספת תגובה בתוך ה-popover
-                    new_comment = st.text_input("הוסף תגובה...", key=f"input_{p['id']}")
-                    if st.button("שלח", key=f"btn_{p['id']}"):
+                    new_comment = st.text_input("Add a comment...", key=f"input_{p['id']}")
+                    if st.button("Send", key=f"btn_{p['id']}"):
                         if new_comment.strip():
                             supabase.table("comments").insert({
                                 "post_id": p['id'], 
@@ -377,18 +344,17 @@ with tab3:
 
             with cols[2]:
                 if p["user"] == st.session_state["user_name"]:
-                    if st.button("🗑️ מחק פוסט", key=f"del_{p['id']}"):
+                    if st.button("🗑️ Delete Post", key=f"del_{p['id']}"):
                         supabase.table("blog").delete().eq("id", p['id']).execute()
                         st.rerun()
+
 # --- TAB 4: INSIGHTS ---
 with tab4:
-    st.header("✨ תובנות אישיות")
+    st.header("✨ Personal Insights")
     
-    # שליפת הנתונים של המשתמש הנוכחי
     my_logs = [l for l in all_logs if l['user'] == st.session_state["user_name"]]
     
     if len(my_logs) >= 2:
-        # דוגמה ללוגיקת השוואה פשוטה בין היום האחרון לזה שלפניו
         my_logs_sorted = sorted(my_logs, key=lambda x: x['date'], reverse=True)
         latest_log = my_logs_sorted[0]
         previous_log = my_logs_sorted[1]
@@ -396,31 +362,28 @@ with tab4:
         latest_time = latest_log.get('hours', 0) + (latest_log.get('minutes', 0) / 60)
         previous_time = previous_log.get('hours', 0) + (previous_log.get('minutes', 0) / 60)
         
-        # תובנה חכמה ראשונה
         with st.container(border=True):
-            st.subheader("📊 Your Trend:")
+            st.subheader("📊 Your Trend")
             if latest_time < previous_time:
                 diff = previous_time - latest_time
                 percent_drop = int((diff / previous_time) * 100) if previous_time > 0 else 0
-                st.success(f"איזה אלופה/ה! ירדת ב-**{percent_drop}%** מזמן המסך שלך לעומת הדיווח הקודם. המשך כך!")
+                st.success(f"Awesome! You decreased your screen time by **{percent_drop}%** compared to your last log. Keep it up!")
             elif latest_time > previous_time:
-                st.warning("זמן המסך שלך קצת עלה לאחרונה. נסה לשים לב לאפליקציה שגוזלת ממך הכי הרבה זמן היום.")
+                st.warning("Your screen time has gone up slightly. Try to notice which app is taking up most of your time today.")
             else:
-                st.info("זמן המסך שלך נשאר יציב. בוא ננסה להוריד חצי שעה מחר!")
+                st.info("Your screen time is stable. Let's try to shave off half an hour tomorrow!")
 
-        # זמן שהרווחנו (Time Reclaimed)
         with st.container(border=True):
-            st.subheader("⏳ זמן שהרווחת")
-            # נניח שהיעד האישי הוא 4 שעות. כל מה שמתחת נחשב זמן "שנחסך".
+            st.subheader("⏳ Time Reclaimed")
             daily_goal = 4.0 
             if latest_time < daily_goal:
                 saved_time = daily_goal - latest_time
                 saved_h = int(saved_time)
                 saved_m = int((saved_time - saved_h) * 60)
                 
-                st.markdown(f"### You Managed to save **{saved_h}h {saved_m}m** Today! 🎉")
-                st.markdown("זה לגמרי מספיק זמן כדי לשבת בנחת על המפות ולתכנן את מסלול הטרק בנורווגיה, או לקפוץ לסשן בולדרינג ממוקד בלי הסחות דעת.")
+                st.markdown(f"### You managed to save **{saved_h}h {saved_m}m** today! 🎉")
+                st.markdown("That's definitely enough time to sit down with the maps and plan your trekking route in Norway, or jump into a focused bouldering session without distractions.")
             else:
-                st.markdown("עדיין לא חסכת זמן היום מתחת ליעד (4 שעות). מחר זה יום חדש!")
+                st.markdown("You haven't saved time below your goal (4 hours) today. Tomorrow is a new day!")
     else:
-        st.info("אנחנו צריכים לפחות 2 דיווחים כדי להתחיל לייצר לך תובנות חכמות. תמשיך לתעד!")
+        st.info("We need at least 2 logs to start generating smart insights for you. Keep tracking!")
