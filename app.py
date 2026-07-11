@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd 
-from datetime import datetime
+from datetime import datetime, timezone
 from supabase import create_client
 import plotly.express as px
 
