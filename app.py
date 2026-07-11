@@ -262,27 +262,60 @@ with tab1:
         st.info("No logs available in the system yet.")
         
 # --- TAB 2: Squad Challenges ---
+def reset_squad_challenges():
+    """מאפסת את ה-Leaderboard ואת ה-Logs לשבוע חדש"""
+    # 1. איפוס נקודות ב-Leaderboard
+    leaderboard_data = supabase.table("leaderboard").select("*").execute().data
+    for user in leaderboard_data:
+        supabase.table("leaderboard").update({"points": 0}).eq("user", user['user']).execute()
+    
+    # 2. איפוס שעות ב-Logs (אם אתה רוצה לאפס את יומן השעות הקבוצתי)
+    # נניח שאתה רוצה למחוק את כל ה-logs הישנים כדי להתחיל שבוע חדש
+    # supabase.table("logs").delete().neq("id", 0).execute() 
+    
+    st.success("All squad challenges have been reset for the new week! 🚀")
+    st.rerun()
+
+# --- TAB 2: SQUAD CHALLENGES ---
 with tab2:
     st.header("🏆 Squad Challenges")
     
-    SQUAD_WEEKLY_GOAL = 100.0
+    today = datetime.now()
     
-    total_squad_hours = 0
-    for log in all_logs:
-        total_squad_hours += log.get('hours', 0) + (log.get('minutes', 0) / 60)
+    # --- 1. אתגר שעות מסך (Weekly Screen Time) ---
+    st.subheader("⏱️ Weekly Screen Time Goal")
+    # שליפת כל הלוגים הקיימים (כנראה מהשבוע האחרון)
+    all_logs = supabase.table("logs").select("*").execute().data
+    total_hours_this_week = sum(l.get('hours', 0) + (l.get('minutes', 0) / 60) for l in all_logs)
+    
+    st.progress(min(total_hours_this_week / 100, 1.0))
+    st.write(f"Total Squad Screen Time: {total_hours_this_week:.1f} / 100 hours")
+    
+    st.divider()
+    
+    # --- 2. אתגר נקודות (Weekly Points Challenge) ---
+    st.subheader("🌟 Weekly Squad Points Challenge")
+    SQUAD_POINTS_GOAL = 1000
+    
+    leaderboard_data = supabase.table("leaderboard").select("*").execute().data
+    weekly_squad_points = sum(user.get('points', 0) for user in leaderboard_data)
         
-    st.subheader("🤝 Group's Co-op Challenge:")
-    st.markdown(f"**Weekly goal: Keep the total screen time under {int(SQUAD_WEEKLY_GOAL)} hours**")
+    st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
     
-    progress_val = min(total_squad_hours / SQUAD_WEEKLY_GOAL, 1.0)
+    # --- מנגנון איפוס מרכזי (עובד על כולם ביום ראשון) ---
+    if today.weekday() == 6: # יום ראשון
+        st.info("📅 It's Sunday! Time for a fresh start.")
+        if st.button("🔄 Reset All Squad Challenges"):
+            reset_squad_challenges()
+                
+    # תצוגת בר ההתקדמות לנקודות
+    progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
+    st.progress(progress_pts)
+    st.write(f"Squad Points: {weekly_squad_points} / {SQUAD_POINTS_GOAL}")
     
-    if progress_val > 0.8:
-        st.warning(f"Watch out! We're getting dangerously close to our weekly limit! We're currently at {int(total_squad_hours)} hours")
-        st.progress(progress_val)
-    else:
-        st.success(f"We're doing fine! We are currently at {int(total_squad_hours)} hours out of {int(SQUAD_WEEKLY_GOAL)}.")
-        st.progress(progress_val)
-    
+    if progress_pts >= 1.0:
+        st.success("Squad goal crushed! 🎉")
+        
     st.divider()
     st.header("🏆 Leaderboard")
     leaderboard = supabase.table("leaderboard").select("*").order("points", desc=True).execute().data
