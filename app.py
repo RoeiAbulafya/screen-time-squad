@@ -515,8 +515,13 @@ with tab5:
             color_discrete_sequence=["#4CAF50"] 
         )
         
-        fig_pts.update_traces(textposition='outside')
+        if len(daily_points) == 1:
+            fig_pts.update_traces(width=0.2, textposition='outside')
+        else:
+            fig_pts.update_traces(textposition='outside')
+            
         fig_pts.update_layout(
+            xaxis=dict(type='category'),  
             xaxis_title="", 
             yaxis_title="Points",
             plot_bgcolor="rgba(0,0,0,0)",
