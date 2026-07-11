@@ -228,7 +228,7 @@ with tab1:
                         )
                     )
                     
-                    st.plotly_chart(fig_apps, use_container_width=True, config={'displayModeBar': False})
+                    st.plotly_chart(fig_apps, width= 'stretch', config={'displayModeBar': False})
                     
                     # שורת טקסט פירוט מתחת לבר (בלי להציג את Other בטקסט השורתי)
                     breakdown_strs = []
@@ -256,7 +256,7 @@ with tab1:
         
         fig_line = px.line(df, x='date', y='total_time', color='user', 
                         markers=True, title="Screen Time by User (Total Hours)")
-        st.plotly_chart(fig_line, use_container_width=True)
+        st.plotly_chart(fig_line, width= 'stretch')
 
     else:
         st.info("No logs available in the system yet.")
@@ -554,13 +554,13 @@ with tab5:
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)"
         )
-        st.plotly_chart(fig_pts, use_container_width=True)
+        st.plotly_chart(fig_pts, width= 'stretch')
         
         # 3. היסטוריית אתגרים (טבלה)
         st.subheader("📜 Challenge History")
         st.dataframe(
             df_c[['date', 'challenge_name', 'difficulty', 'points']].sort_values(by='date', ascending=False),
-            use_container_width=True,
+            width= 'stretch',
             hide_index=True
         )
     else:
