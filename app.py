@@ -313,8 +313,56 @@ with tab2:
     st.divider()
     st.header("🏆 Leaderboard")
     leaderboard = supabase.table("leaderboard").select("*").order("points", desc=True).execute().data
+    
     if leaderboard:
-        st.dataframe(pd.DataFrame(leaderboard), width='stretch')
+        # בדיקה: אם יש לפחות 3 משתמשים, נציג את הפודיום המשוגע
+        if len(leaderboard) >= 3:
+            first_place = leaderboard[0]
+            second_place = leaderboard[1]
+            third_place = leaderboard[2]
+            
+            # יצירת 3 עמודות שוות
+            col1, col2, col3 = st.columns(3)
+            
+            # עמודה 1 (שמאל) - מקום שלישי (הכי נמוך, נדחף 100 פיקסלים למטה)
+            with col1:
+                st.markdown(f"""
+                <div style='text-align: center; margin-top: 100px; padding: 20px; background-color: #CD7F32; border-radius: 10px; color: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>
+                    <h3>🥉 3rd</h3>
+                    <h4>{third_place.get('user', 'Unknown')}</h4>
+                    <p><b>{third_place.get('points', 0)}</b> pts</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            # עמודה 2 (אמצע) - מקום ראשון (הכי גבוה, לא נדחף בכלל)
+            with col2:
+                st.markdown(f"""
+                <div style='text-align: center; margin-top: 0px; padding: 25px; background-color: #FFD700; border-radius: 10px; color: black; box-shadow: 0px 4px 12px rgba(0,0,0,0.5);'>
+                    <h1>👑 1st</h1>
+                    <h2>{first_place.get('user', 'Unknown')}</h2>
+                    <p style='font-size: 20px;'><b>{first_place.get('points', 0)}</b> pts</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            # עמודה 3 (ימין) - מקום שני (גובה בינוני, נדחף 50 פיקסלים למטה)
+            with col3:
+                st.markdown(f"""
+                <div style='text-align: center; margin-top: 50px; padding: 20px; background-color: #C0C0C0; border-radius: 10px; color: black; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>
+                    <h2>🥈 2nd</h2>
+                    <h3>{second_place.get('user', 'Unknown')}</h3>
+                    <p><b>{second_place.get('points', 0)}</b> pts</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            # בונוס: אם בעתיד יצטרפו עוד אנשים לסקוואד (מעבר לטופ 3), נציג אותם בטבלה פשוטה מתחת לפודיום
+            if len(leaderboard) > 3:
+                st.write("")
+                st.write("### Rest of the Squad")
+                st.dataframe(pd.DataFrame(leaderboard[3:]), width='stretch')
+                
+        else:
+            # גיבוי: אם יש פחות מ-3 שחקנים רשומים כרגע, נציג טבלה רגילה כדי שלא יישבר העיצוב
+            st.dataframe(pd.DataFrame(leaderboard), width='stretch')
     
     st.subheader("✅ Daily Challenges")
     challenges_data = supabase.table("challenges").select("*").execute().data
