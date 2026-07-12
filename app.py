@@ -278,65 +278,72 @@ with tab2:
     
     today = datetime.now()
     
-    # --- 1. משיכת נתונים וחישובים חכמים לפי שבועות ---
+    # --- 1. משיכת נתונים נקייה מהדאטה-בייס ---
     all_logs = supabase.table("logs").select("*").execute().data
-    
-    # חישוב מזהה השבוע הנוכחי (לפי שיטת יום ראשון שלך)
-    current_week_id = (today + timedelta(days=1)).strftime("%G-%V")
-    
-    # חישוב השעות אך ורק עבור השבוע הנוכחי
-    total_hours_this_week = 0
-    for l in all_logs:
-        # הפיכת מחרוזת הזמן של סופאבייס לאובייקט datetime להתאמה מול today
-        log_date = datetime.fromisoformat(l['created_at'].replace('Z', '+00:00')).replace(tzinfo=None)
-        log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
-        
-        if log_week_id == current_week_id:
-            total_hours_this_week += l.get('hours', 0) + (l.get('minutes', 0) / 60)
-    
-    # משיכת נקודות הלידרבורד הנוכחיות
     leaderboard_data = supabase.table("leaderboard").select("*").execute().data
-    weekly_squad_points = sum(user.get('points', 0) for user in leaderboard_data)
+    settings_data = supabase.table("settings").select("*").execute().data
     
+    # הפיכת הגדרות למילון נוח לקריאה
+    settings_dict = {item['key']: item['value'] for item in settings_data}
+    last_reset_week = settings_dict.get("last_reset_week", "0")
     SQUAD_POINTS_GOAL = 1000
 
-    # --- 2. מנגנון איפוס אוטומטי (ללא מחיקת לוגים) ---
-    if "already_reset_this_session" not in st.session_state:
-        st.session_state["already_reset_this_session"] = False
-    
-    settings_data = supabase.table("settings").select("*").execute().data
-    settings_dict = {item['key']: item['value'] for item in settings_data}
-    
-    last_reset_week = settings_dict.get("last_reset_week", "0")
-    
-    # נכנסים לאיפוס רק אם השבוע התחלף ועדיין לא ניסינו בריצה הזו
-    if current_week_id != last_reset_week and not st.session_state["already_reset_this_session"]:
-        st.session_state["already_reset_this_session"] = True
-        
+    # חישוב מזהה השבוע הנוכחי (הזזה של יום אחד כדי שיום ראשון ייחשב תחילת השבוע)
+    current_week_id = (today + timedelta(days=1)).strftime("%G-%V")
+
+    # --- 2. מנגנון איפוס אוטומטי לחלוטין (ללא st.rerun - חסין לולאות!) ---
+    if current_week_id != last_reset_week:
         try:
-            # בשביל ה"צילום", נחשב כמה שעות נצברו בשבוע שזה עתה הסתיים (last_reset_week)
+            # חישוב שעות של השבוע שזה עתה הסתיים לצורך ה"צילום"
             last_week_hours_calc = 0
             for l in all_logs:
-                log_date = datetime.fromisoformat(l['created_at'].replace('Z', '+00:00')).replace(tzinfo=None)
-                log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
-                if log_week_id == last_reset_week:
-                    last_week_hours_calc += l.get('hours', 0) + (l.get('minutes', 0) / 60)
+                c_at = l.get('created_at')
+                if c_at:
+                    log_date_part = c_at.split('T')[0] # לוקח רק את ה-YYYY-MM-DD
+                    log_date = datetime.strptime(log_date_part, "%Y-%m-%d")
+                    log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
+                    if log_week_id == last_reset_week:
+                        last_week_hours_calc += l.get('hours', 0) + (l.get('minutes', 0) / 60)
+
+            # חישוב נקודות סך הכל של השבוע שנסגר
+            last_week_points_calc = sum(user.get('points', 0) for user in leaderboard_data)
             
-            # א. שומרים את ה"צילום" של השבוע שהסתיים לטבלת ה-settings
+            # שמירת ה"צילום" ב-Supabase
             supabase.table("settings").upsert({"key": "last_week_hours", "value": f"{last_week_hours_calc:.1f}"}).execute()
-            supabase.table("settings").upsert({"key": "last_week_points", "value": str(weekly_squad_points)}).execute()
-            
-            # ב. מאפסים רק את הלידרבורד (הלוגים נשארים שלמים בדאטה-בייס!)
-            reset_squad_challenges()
-            
-            # ג. מעדכנים שביצענו איפוס לשבוע הזה
+            supabase.table("settings").upsert({"key": "last_week_points", "value": str(last_week_points_calc)}).execute()
             supabase.table("settings").upsert({"key": "last_reset_week", "value": current_week_id}).execute()
             
-            st.rerun()
+            # הפעלת פונקציית איפוס הלידרבורד ב-DB
+            reset_squad_challenges()
+            
+            # עדכון משתנים מקומיים באופן מיידי כדי לחסוך רענון דף
+            settings_dict["last_week_hours"] = f"{last_week_hours_calc:.1f}"
+            settings_dict["last_week_points"] = str(last_week_points_calc)
+            settings_dict["last_reset_week"] = current_week_id
+            
+            # מכיוון שהלידרבורד אופס ב-DB, נאפס אותו זמנית גם בקוד לריצה הנוכחית
+            leaderboard_data = [{"user": u.get("user"), "points": 0} for u in leaderboard_data]
+            
         except Exception as e:
-            st.error(f"Supabase Sync Error: {e}")
+            st.error(f"🔄 Auto-reset sync error: {e}")
 
-    # --- 3. תצוגת סיכום השבוע שחלף (מופיעה אוטומטית רק ביום ראשון) ---
+    # --- 3. חישוב שעות ונקודות בזמן אמת עבור השבוע הנוכחי בלבד ---
+    total_hours_this_week = 0
+    for l in all_logs:
+        c_at = l.get('created_at')
+        if c_at:
+            log_date_part = c_at.split('T')[0]
+            log_date = datetime.strptime(log_date_part, "%Y-%m-%d")
+            log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
+        else:
+            log_week_id = "old"
+            
+        if log_week_id == current_week_id:
+            total_hours_this_week += l.get('hours', 0) + (l.get('minutes', 0) / 60)
+
+    weekly_squad_points = sum(user.get('points', 0) for user in leaderboard_data)
+
+    # --- 4. תצוגת סיכום השבוע שחלף (מופיעה אוטומטית רק ביום ראשון) ---
     if today.weekday() == 6: # יום ראשון
         st.info("📅 **It's Sunday! Reviewing last week's performance...**")
         
@@ -360,11 +367,22 @@ with tab2:
                 st.error(f"❌ **Failed!** Squad reached only **{history_points}** / {SQUAD_POINTS_GOAL} points.")
         st.divider()
 
-    # --- 4. תצוגת האתגרים הפעילים של השבוע הנוכחי ---
+    # --- 5. תצוגת האתגרים הפעילים של השבוע הנוכחי ---
     st.subheader("⏱️ Weekly Screen Time Goal")
     st.progress(min(total_hours_this_week / 100, 1.0))
     st.write(f"Total Squad Screen Time: {total_hours_this_week:.1f} / 100 hours")
     
+    st.divider()
+    
+    st.subheader("🌟 Weekly Squad Points Challenge")
+    st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
+    
+    progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
+    st.progress(progress_pts)
+    st.write(f"Squad Points: {weekly_squad_points} / {SQUAD_POINTS_GOAL}")
+    
+    if progress_pts >= 1.0:
+        st.success("Squad goal crushed! 🎉")
     st.divider()
     
     st.subheader("🌟 Weekly Squad Points Challenge")
