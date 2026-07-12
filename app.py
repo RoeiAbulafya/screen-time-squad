@@ -263,12 +263,14 @@ with tab1:
         
 # --- Function that calculates when is Sunday ---
 def reset_squad_challenges():
-    leaderboard_data = supabase.table("leaderboard").select("*").execute().data
-    for user in leaderboard_data:
-        supabase.table("leaderboard").update({"points": 0}).eq("user", user['user']).execute()
+    # 1. מחיקת כל הלוגים של השעות (כדי להחזיר את הבר ל-0)
+    supabase.table("logs").delete().neq("hours", -1).execute()
     
-    st.success("All squad challenges have been reset for the new week! 🚀")
-    st.rerun()
+    # 2. איפוס נקודות הלידרבורד של כולם חזרה ל-0
+    users_data = supabase.table("leaderboard").select("user").execute().data
+    if users_data:
+        for u in users_data:
+            supabase.table("leaderboard").update({"points": 0}).eq("user", u['user']).execute()
 
 # --- TAB 2: SQUAD CHALLENGES ---
 with tab2:
