@@ -332,13 +332,6 @@ with tab2:
             st.error(f"Reset failed: {e}")
     st.divider()
     
-    st.subheader("🌟 Weekly Squad Points Challenge")
-    st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
-    
-    progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
-    st.progress(progress_pts)
-    st.write(f"Squad Points: {weekly_squad_points} / {SQUAD_POINTS_GOAL}")
-    
     if progress_pts >= 1.0:
         st.success("Squad goal crushed! 🎉")
     st.divider()
