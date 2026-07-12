@@ -283,27 +283,34 @@ with tab2:
     leaderboard_data = supabase.table("leaderboard").select("*").execute().data
     settings_data = supabase.table("settings").select("*").execute().data
     
-    # הפיכת הגדרות למילון נוח לקריאה
     settings_dict = {item['key']: item['value'] for item in settings_data}
     last_reset_week = settings_dict.get("last_reset_week", "0")
     SQUAD_POINTS_GOAL = 1000
 
-    # חישוב מזהה השבוע הנוכחי (הזזה של יום אחד כדי שיום ראשון ייחשב תחילת השבוע)
+    # חישוב מזהה השבוע הנוכחי
     current_week_id = (today + timedelta(days=1)).strftime("%G-%V")
 
-    # --- 2. מנגנון איפוס אוטומטי לחלוטין (ללא st.rerun - חסין לולאות!) ---
-    if current_week_id != last_reset_week:
+    # חגורת בטיחות למניעת כניסה כפולה באיפוס
+    if "already_reset_this_session" not in st.session_state:
+        st.session_state["already_reset_this_session"] = False
+
+    # --- 2. מנגנון איפוס אוטומטי לחלוטין (חסין לולאות וחסין סגפילט) ---
+    if current_week_id != last_reset_week and not st.session_state["already_reset_this_session"]:
+        st.session_state["already_reset_this_session"] = True
         try:
-            # חישוב שעות של השבוע שזה עתה הסתיים לצורך ה"צילום"
+            # חישוב שעות של השבוע שנסגר לצורך ה"צילום"
             last_week_hours_calc = 0
             for l in all_logs:
                 c_at = l.get('created_at')
                 if c_at:
-                    log_date_part = c_at.split('T')[0] # לוקח רק את ה-YYYY-MM-DD
-                    log_date = datetime.strptime(log_date_part, "%Y-%m-%d")
-                    log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
-                    if log_week_id == last_reset_week:
-                        last_week_hours_calc += l.get('hours', 0) + (l.get('minutes', 0) / 60)
+                    # פירוק טקסטואלי בטוח לחלוטין ללא strptime
+                    date_part = c_at.split('T')[0].split(' ')[0]
+                    date_pieces = date_part.split('-')
+                    if len(date_pieces) == 3:
+                        log_date = datetime(int(date_pieces[0]), int(date_pieces[1]), int(date_pieces[2]))
+                        log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
+                        if log_week_id == last_reset_week:
+                            last_week_hours_calc += l.get('hours', 0) + (l.get('minutes', 0) / 60)
 
             # חישוב נקודות סך הכל של השבוע שנסגר
             last_week_points_calc = sum(user.get('points', 0) for user in leaderboard_data)
@@ -316,12 +323,12 @@ with tab2:
             # הפעלת פונקציית איפוס הלידרבורד ב-DB
             reset_squad_challenges()
             
-            # עדכון משתנים מקומיים באופן מיידי כדי לחסוך רענון דף
+            # עדכון המילון המקומי כדי להציג את הנתונים החדשים מיד ללא רענון
             settings_dict["last_week_hours"] = f"{last_week_hours_calc:.1f}"
             settings_dict["last_week_points"] = str(last_week_points_calc)
             settings_dict["last_reset_week"] = current_week_id
             
-            # מכיוון שהלידרבורד אופס ב-DB, נאפס אותו זמנית גם בקוד לריצה הנוכחית
+            # איפוס מקומי של הלידרבורד לתצוגה חלקה ברגע האיפוס
             leaderboard_data = [{"user": u.get("user"), "points": 0} for u in leaderboard_data]
             
         except Exception as e:
@@ -332,9 +339,14 @@ with tab2:
     for l in all_logs:
         c_at = l.get('created_at')
         if c_at:
-            log_date_part = c_at.split('T')[0]
-            log_date = datetime.strptime(log_date_part, "%Y-%m-%d")
-            log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
+            # פירוק טקסטואלי בטוח
+            date_part = c_at.split('T')[0].split(' ')[0]
+            date_pieces = date_part.split('-')
+            if len(date_pieces) == 3:
+                log_date = datetime(int(date_pieces[0]), int(date_pieces[1]), int(date_pieces[2]))
+                log_week_id = (log_date + timedelta(days=1)).strftime("%G-%V")
+            else:
+                log_week_id = "old"
         else:
             log_week_id = "old"
             
@@ -372,6 +384,17 @@ with tab2:
     st.progress(min(total_hours_this_week / 100, 1.0))
     st.write(f"Total Squad Screen Time: {total_hours_this_week:.1f} / 100 hours")
     
+    st.divider()
+    
+    st.subheader("🌟 Weekly Squad Points Challenge")
+    st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
+    
+    progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
+    st.progress(progress_pts)
+    st.write(f"Squad Points: {weekly_squad_points} / {SQUAD_POINTS_GOAL}")
+    
+    if progress_pts >= 1.0:
+        st.success("Squad goal crushed! 🎉")
     st.divider()
     
     st.subheader("🌟 Weekly Squad Points Challenge")
