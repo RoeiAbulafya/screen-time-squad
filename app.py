@@ -266,7 +266,6 @@ def reset_squad_challenges():
     leaderboard_data = supabase.table("leaderboard").select("*").execute().data
     for user in leaderboard_data:
         supabase.table("leaderboard").update({"points": 0}).eq("user", user['user']).execute()
-    total_hours_this_week=0
     
     st.success("All squad challenges have been reset for the new week! 🚀")
     st.rerun()
@@ -297,11 +296,56 @@ with tab2:
         
     st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
     
-    # --- מנגנון איפוס מרכזי (עובד על כולם ביום ראשון) ---
+    # --- מנגנון איפוס אוטומטי לחלוטין (The Lazy Snapshot Trick) ---
+    # נחשב מזהה ייחודי לשבוע הנוכחי (למשל: "2026-28")
+    # מכיוון שאתה רוצה שיום ראשון יהיה יום האיפוס, נזיז את התאריך ביום אחד קדימה בחישוב ה-ISO
+    current_week_id = (today + timedelta(days=1)).strftime("%G-%V")
+    
+    # משיכת נתוני האיפוס האחרון מהדאטה-בייס
+    settings_data = supabase.table("settings").select("*").execute().data
+    settings_dict = {item['key']: item['value'] for item in settings_data}
+    
+    last_reset_week = settings_dict.get("last_reset_week", "0")
+    
+    # בדיקה: אם מזהה השבוע הנוכחי שונה מהאיפוס האחרון - הגיע הזמן לאפס אוטומטית!
+    if current_week_id != last_reset_week:
+        # 1. שומרים צילום מצב של ההישגים של השבוע שנסגר
+        supabase.table("settings").upsert({"key": "last_week_hours", "value": f"{total_hours_this_week:.1f}"}).execute()
+        supabase.table("settings").upsert({"key": "last_week_points", "value": str(weekly_squad_points)}).execute()
+        
+        # 2. מאפסים את הנתונים בפועל לשבוע החדש
+        reset_squad_challenges()
+        
+        # 3. מעדכנים שביצענו איפוס לשבוע הזה
+        supabase.table("settings").upsert({"key": "last_reset_week", "value": current_week_id}).execute()
+        
+        # מרעננים את המסך כדי שהנתונים המאופסים ייטענו
+        st.rerun()
+
+    # --- תצוגת סיכום השבוע שחלף (מופיע רק ביום ראשון) ---
     if today.weekday() == 6: # יום ראשון
-        st.info("📅 It's Sunday! Time for a fresh start.")
-        if st.button("🔄 Reset All Squad Challenges"):
-            reset_squad_challenges()
+        st.info("📅 **It's Sunday! Reviewing last week's performance...**")
+        
+        # שולפים את נתוני "צילום המצב" של שבוע שעבר מהטבלה
+        history_hours = float(settings_dict.get("last_week_hours", 0))
+        history_points = int(settings_dict.get("last_week_points", 0))
+        
+        rec_col1, rec_col2 = st.columns(2)
+        
+        with rec_col1:
+            st.write("### ⏱️ Screen Time Result")
+            if history_hours < 100:
+                st.success(f"🏆 **Success!** The squad stayed under 100 hours! Total: **{history_hours:.1f}** hours. 🎉")
+            else:
+                st.error(f"❌ **Failed!** The squad exceeded the limit. Total: **{history_hours:.1f}** hours. 📱")
+                
+        with rec_col2:
+            st.write("### 🌟 Squad Points Result")
+            if history_points >= SQUAD_POINTS_GOAL:
+                st.success(f"🏆 **Success!** Goal crushed! The squad reached **{history_points}** / {SQUAD_POINTS_GOAL} points! 💪")
+            else:
+                st.error(f"❌ **Failed!** Squad reached only **{history_points}** / {SQUAD_POINTS_GOAL} points.")
+        st.divider()
                 
     # תצוגת בר ההתקדמות לנקודות
     progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
