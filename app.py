@@ -266,6 +266,7 @@ def reset_squad_challenges():
     leaderboard_data = supabase.table("leaderboard").select("*").execute().data
     for user in leaderboard_data:
         supabase.table("leaderboard").update({"points": 0}).eq("user", user['user']).execute()
+    total_hours_this_week=0
     
     st.success("All squad challenges have been reset for the new week! 🚀")
     st.rerun()
