@@ -405,32 +405,90 @@ with tab2:
         created_at = datetime.fromisoformat(ch['created_at'].replace('Z', '+00:00'))
         time_passed = now - created_at
         
-        if ch['status'] == 'pending':
-            if time_passed.total_seconds() >= 86400: # עברו 24 שעות
-                yes_count = len(ch.get('votes_yes', []))
-                no_count = len(ch.get('votes_no', []))
+        if ch.get('status') == 'pending':
+            # משיכת ההצבעות בצורה בטוחה (מונע שגיאות אם הערך ב-DB הוא Null)
+            yes_votes = ch.get('votes_yes') or []
+            no_votes = ch.get('votes_no') or []
+            yes_count = len(yes_votes)
+            no_count = len(no_votes)
+            
+            # 1. מסלול ירוק (Fast-Track): האם הושג רוב של 2 חברים? (שנה את המספר לפי גודל הקבוצה שלכם)
+            if yes_count >= 2:
+                # האתגר אושר מיידית! מעדכנים בדאטה-בייס
+                supabase.table("challenges").update({"status": "approved"}).eq("id", ch['id']).execute()
+                # משנים את הסטטוס גם מקומית כדי שיופיע מיד למטה בלי צורך ברענון נוסף
+                ch['status'] = 'approved' 
+                active_challenges.append(ch)
                 
+            # 2. אם אין עדיין אישור מהיר, נבדוק אם עברו 24 שעות שלמות
+            elif time_passed.total_seconds() >= 86400: 
                 if yes_count > no_count:
-                    # האתגר אושר! מעדכנים סטטוס
+                    # עבר הזמן ויש רוב - האתגר אושר!
                     supabase.table("challenges").update({"status": "approved"}).eq("id", ch['id']).execute()
                     active_challenges.append(ch)
                 else:
-                    # האתגר נדחה - מוחקים אותו
+                    # עבר הזמן ואין רוב בעד - האתגר נדחה ונמחק
                     supabase.table("challenges").delete().eq("id", ch['id']).execute()
+            
+            # 3. לא עברו 24 שעות ועדיין אין רוב מוחלט - האתגר נשאר בפרלמנט
             else:
-                # עדיין בתוך ה-24 שעות
                 pending_challenges.append(ch)
+                
         else:
+            # כל מה שכבר אושר בעבר (status != pending) נכנס מיד לאתגרים הפעילים
             active_challenges.append(ch)
 
     # --- חלק א': אתגרים פעילים (הקוד המקורי שלך, רק על active_challenges) ---
+   # --- חלק א': אתגרים פעילים ---
     if active_challenges:
+        st.write("### 🎯 Active Challenges")
         with st.form("challenges_form"):
-            # ... כאן נשאר הלוגיקה של הצ'קבוקסים ועדכון הניקוד שלך ...
-            st.form_submit_button("Update Score")
+            # מילון שישמור אילו צ'קבוקסים סומנו עכשיו
+            newly_completed = {}
+            
+            for ch in active_challenges:
+                # בודקים מי כבר השלים את האתגר (מונע קריסה אם העמודה ריקה)
+                completed_by = ch.get('completed_by') or []
+                
+                if current_user in completed_by:
+                    # המשתמש כבר עשה את האתגר - נציג כנעול
+                    st.checkbox(f"✅ {ch['task']} ({ch['points']} pts) - Completed!", value=True, disabled=True, key=f"chk_{ch['id']}")
+                else:
+                    # המשתמש עדיין לא עשה את האתגר - פתוח לסימון
+                    newly_completed[ch['id']] = st.checkbox(f"⬜ {ch['task']} ({ch['points']} pts)", key=f"chk_{ch['id']}")
+                    
+            submit_btn = st.form_submit_button("Update Score")
+            
+            if submit_btn:
+                points_to_add = 0
+                
+                for ch_id, is_checked in newly_completed.items():
+                    if is_checked:
+                        # מוצאים את האתגר הספציפי מתוך הרשימה
+                        ch_data = next(c for c in active_challenges if c['id'] == ch_id)
+                        points_to_add += ch_data['points']
+                        
+                        # מעדכנים בדאטה-בייס שהמשתמש הזה השלים את האתגר
+                        updated_completed_by = (ch_data.get('completed_by') or []) + [current_user]
+                        supabase.table("challenges").update({"completed_by": updated_completed_by}).eq("id", ch_id).execute()
+                
+                if points_to_add > 0:
+                    # מושכים את הניקוד הנוכחי של המשתמש מהלידרבורד
+                    user_record = supabase.table("leaderboard").select("points").eq("user", current_user).execute().data
+                    if user_record:
+                        current_points = user_record[0].get("points", 0)
+                        # מעדכנים את הניקוד החדש
+                        supabase.table("leaderboard").update({"points": current_points + points_to_add}).eq("user", current_user).execute()
+                        
+                        st.success(f"Awesome! You earned {points_to_add} points! 🎉")
+                        st.rerun()
+                    else:
+                        st.error("Could not find your user in the leaderboard.")
+                else:
+                    st.warning("You didn't check any new challenges.")
+
     else:
         st.info("No active challenges yet. Go suggest one below!")
-
     # --- חלק ב': אתגרים בהצבעה (הפרלמנט) ---
     if pending_challenges:
         st.write("### 🗳️ Challenges Under Review (24h)")
