@@ -278,21 +278,23 @@ with tab2:
     leaderboard_data = supabase.table("leaderboard").select("*").execute().data
     settings_data = supabase.table("settings").select("*").execute().data
     
-    # שליפת זמן האיפוס הידני האחרון (אם לא קיים, ברירת המחדל היא שנת 1970)
     settings_dict = {item['key']: item['value'] for item in settings_data}
     last_reset_time = settings_dict.get("last_reset_time", "1970-01-01T00:00:00")
     
+    # חיתוך מחרוזת האיפוס לפורמט נקי (YYYY-MM-DDTHH:MM:SS) למניעת בעיות השוואה
+    last_reset_clean = last_reset_time[:19].replace(" ", "T")
+    
     SQUAD_POINTS_GOAL = 1000
 
-    # --- 2. חישוב שעות מסך שנוצרו אך ורק *אחרי* הלחיצה האחרונה על כפתור האיפוס ---
-    # השוואת מחרוזות טקסט טהורה - חסינת Segmentation Fault לחלוטין!
+    # --- 2. חישוב חסין-תקלות של שעות מסך ---
     total_hours_this_week = 0
     for l in all_logs:
-        c_at = l.get('created_at', '')
-        if c_at and c_at > last_reset_time:
-            total_hours_this_week += l.get('hours', 0) + (l.get('minutes', 0) / 60)
+        c_at = l.get('created_at')
+        if c_at: # מוודא שהתאריך לא ריק
+            c_at_clean = c_at[:19].replace(" ", "T")
+            if c_at_clean > last_reset_clean:
+                total_hours_this_week += l.get('hours', 0) + (l.get('minutes', 0) / 60)
             
-    # חישוב נקודות הלידרבורד הנוכחיות
     weekly_squad_points = sum(user.get('points', 0) for user in leaderboard_data)
 
     # --- 3. תצוגת אתגר שעות המסך השבועי ---
@@ -315,22 +317,20 @@ with tab2:
         
     st.divider()
     
-    # --- 5. כפתור איפוס ידני פשוט, נקי ובטוח ---
+    # --- 5. כפתור איפוס ידני חסין זמנים (UTC) ---
     st.subheader("⚙️ Management")
     if st.button("🔄 Reset All Squad Challenges Now", use_container_width=True):
         try:
-            # א. שומרים את הזמן של הרגע הזה כמחרוזת טקסט רגילה ב-settings
-            now_str = datetime.now().isoformat()
-            supabase.table("settings").upsert({"key": "last_reset_time", "value": now_str}).execute()
+            # שומרים את הזמן ב-UTC בלבד כדי למנוע התנגשות מול הזמן של סופאבייס
+            now_utc_str = datetime.now(timezone.utc).isoformat()
+            supabase.table("settings").upsert({"key": "last_reset_time", "value": now_utc_str}).execute()
             
-            # ב. מאפסים את הלידרבורד ל-0
             reset_squad_challenges()
             
             st.success("All challenges have been reset successfully! 🚀")
-            st.rerun() # הרצה מחדש חד-פעמית ובטוחה רק בעת לחיצה
+            st.rerun()
         except Exception as e:
             st.error(f"Reset failed: {e}")
-    st.divider()
     
     if progress_pts >= 1.0:
         st.success("Squad goal crushed! 🎉")
@@ -438,7 +438,6 @@ with tab2:
             # כל מה שכבר אושר בעבר (status != pending) נכנס מיד לאתגרים הפעילים
             active_challenges.append(ch)
 
-    # --- חלק א': אתגרים פעילים (הקוד המקורי שלך, רק על active_challenges) ---
    # --- חלק א': אתגרים פעילים ---
     if active_challenges:
         st.write("### 🎯 Active Challenges")
