@@ -64,7 +64,7 @@ else:
     st.caption("Squad Members: None (You are not in a squad yet)")
 
 st.subheader(f"Connected as: {current_user} 🔥 {st.session_state.get('streak', 0)} days in a row!")
-ת
+
 # --- STREAK LOGIC ---
 def calculate_streak(user_name, all_logs):
     user_dates = sorted([log['date'] for log in all_logs if log['user'] == user_name], reverse=True)
