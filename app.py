@@ -188,14 +188,14 @@ if "user_name" in st.session_state:
                     submit_create = st.form_submit_button("Create")
                     
                     if submit_create and new_name:טו
-                        new_code = generate_group_code() 
-                        new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
-                        if new_g:
-                            g_id = new_g[0]['id']
-                            supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
-                            supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
-                            st.success(f"Created! Code: {new_code}")
-                            st.rerun()
+                    new_code = generate_group_code() 
+                    new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
+                    if new_g:
+                        g_id = new_g[0]['id']
+                        supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
+                        supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
+                        st.success(f"Created! Code: {new_code}")
+                        st.rerun()
         
 # --- כאן מתחילים הטאבים שלך (tab1, tab2...) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
