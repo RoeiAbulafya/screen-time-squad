@@ -12,12 +12,7 @@ def generate_group_code():
 st.set_page_config(page_title="Screen Time Squad", layout="centered")
 
 # --- COOKIE MANAGER INITIALIZATION ---
-# אתחול מנהל העוגיות 
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+cookie_manager = stx.CookieManager(key="cookie_manager")
 
 # מנסים למשוך את שם המשתמש מהעוגייה (אם קיים)
 saved_user = cookie_manager.get(cookie="saved_username")
