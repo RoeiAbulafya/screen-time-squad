@@ -3,6 +3,10 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from supabase import create_client
 import plotly.express as px
+import random
+import string
+def generate_group_code():
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 st.set_page_config(page_title="Screen Time Squad", layout="centered")
 
@@ -70,6 +74,53 @@ def calculate_streak(user_name, all_logs):
 
 user_streak = calculate_streak(st.session_state["user_name"], supabase.table("logs").select("*").execute().data)
 st.markdown(f"### Connected as: **{st.session_state['user_name']}** 🔥 {user_streak} days in a row!")
+# --- ודא שהמשתמש מחובר ---
+if "user_name" in st.session_state:
+    current_user = st.session_state["user_name"]
+    
+    # משיכת הקבוצות שהמשתמש חבר בהן מתוך טבלת הקשר, כולל פרטי הקבוצה
+    user_groups_response = supabase.table("group_members").select("group_id, groups(id, name, code)").eq("user", current_user).execute()
+    user_groups_data = user_groups_response.data
+    
+    if user_groups_data:
+        # יצירת מילון שממפה את ה-ID של הקבוצה לשם ולמספר הקוד שלה
+        # חשוב: אנחנו מוודאים ש-'groups' לא ריק במקרה של חוסר סנכרון בדאטה-בייס
+        group_options = {
+            item['group_id']: {
+                "name": item['groups']['name'],
+                "code": item['groups']['code']
+            }
+            for item in user_groups_data if item.get('groups')
+        }
+        
+        # כותרת הסיידבר
+        st.sidebar.title("👥 My Squads")
+        
+        # יצירת רשימה של ה-IDs עבור ה-selectbox
+        group_ids = list(group_options.keys())
+        
+        # תיבה נפתחת לבחירת קבוצה. ה-format_func גורם לזה להציג את השם היפה ולא את המספר ID
+        selected_group_id = st.sidebar.selectbox(
+            "Select Active Squad:", 
+            options=group_ids, 
+            format_func=lambda x: group_options[x]["name"]
+        )
+        
+        # שומרים את ה-ID של הקבוצה הפעילה ב-Session State כדי שכל הטאבים יכירו אותו
+        st.session_state["active_group_id"] = selected_group_id
+        
+        # שולפים את הקוד של הקבוצה הפעילה ומציגים אותו למטה בסיידבר
+        active_code = group_options[selected_group_id]["code"]
+        st.sidebar.info(f"🔑 Invite Code: **{active_code}**\n\nShare this with friends to let them join!")
+        
+    else:
+        # אם המשתמש לא חבר באף קבוצה
+        st.session_state["active_group_id"] = None
+        st.sidebar.title("👥 My Squads")
+        st.sidebar.warning("You are not part of any squad yet.")
+        st.sidebar.info("Go to the 'Home' tab to create or join a squad!")
+        
+# --- כאן מתחילים הטאבים שלך (tab1, tab2...) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Dashboard", 
     "🏆 Squad Challenges", 
