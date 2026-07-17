@@ -116,7 +116,7 @@ st.markdown(f"### Connected as: **{current_user}** 🔥 {user_streak} days in a 
     # משיכת הקבוצות שהמשתמש חבר בהן מתוך טבלת הקשר, כולל פרטי הקבוצה
 user_groups_response = supabase.table("group_members").select("group_id, groups(id, name, code)").eq("user", current_user).execute()
 user_groups_data = user_groups_response.data
- group_options = {}   
+group_options = {}   
 if user_groups_data:
     group_options = {
         item['group_id']: {
