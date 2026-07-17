@@ -53,15 +53,29 @@ if not st.session_state["user_name"]:
 active_id = st.session_state.get("active_group_id")
 current_user = st.session_state["user_name"]
 
+# 1. שליפת ה-ID של הקבוצה הפעילה (נוודא שאנחנו מנסים את המפתחות הנפוצים)
+active_id = st.session_state.get("active_group_id") or st.session_state.get("selected_group_id")
+current_user = st.session_state["user_name"]
+
 st.title(f"📱 Screen Time Squad | {current_user}")
 
-# מציגים חברי קבוצה רק אם המשתמש באמת משויך לקבוצה פעילה
+# 2. מציגים חברי קבוצה רק אם נמצאה קבוצה פעילה ב-session_state
 if active_id:
-    members_data = supabase.table("group_members").select("user").eq("group_id", active_id).execute().data
-    squad_users = [m['user'] for m in members_data] if members_data else []
-    st.caption(f"Squad Members: {', '.join(squad_users)}")
+    try:
+        # שליפת חברי הקבוצה מה-DB לפי ה-active_id
+        members_data = supabase.table("group_members").select("user").eq("group_id", active_id).execute().data
+        if members_data:
+            squad_users = [m['user'] for m in members_data]
+            st.caption(f"Squad Members: {', '.join(squad_users)}")
+        else:
+            st.caption("Squad Members: No members found in this database group")
+    except Exception as e:
+        # הגנה במקרה של שגיאת תקשורת או מבנה טבלה
+        st.caption("Squad Members: (Error loading members)")
 else:
     st.caption("Squad Members: None (You are not in a squad yet)")
+
+st.subheader(f"Connected as: {current_user} 🔥 {st.session_state.get('streak', 0)} days in a row!")
 
 # --- STREAK LOGIC ---
 def calculate_streak(user_name, all_logs):
