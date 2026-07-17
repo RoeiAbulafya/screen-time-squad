@@ -311,6 +311,65 @@ with tab1:
 
     else:
         st.info("No logs available in the system yet.")
+    st.divider()
+    st.subheader("🤝 Squad Management")
+
+    col_join, col_create = st.columns(2)
+
+    # --- הצטרפות לקבוצה קיימת ---
+    with col_join:
+        with st.form("join_squad_form", clear_on_submit=True):
+            st.write("**Join an Existing Squad**")
+            join_code = st.text_input("Enter 6-Digit Invite Code:")
+            if st.form_submit_button("Join Squad"):
+                if join_code:
+                    # 1. מוודאים שהקבוצה קיימת
+                    group_check = supabase.table("groups").select("id, name").eq("code", join_code.upper()).execute().data
+                    if group_check:
+                        new_group_id = group_check[0]['id']
+                        group_name = group_check[0]['name']
+                        
+                        try:
+                            # 2. מוסיפים לטבלת חברי הקבוצה
+                            supabase.table("group_members").insert({"group_id": new_group_id, "user": current_user}).execute()
+                            # 3. מאתחלים בלידרבורד הקבוצתי עם 0 נקודות
+                            supabase.table("leaderboard").insert({"group_id": new_group_id, "user": current_user, "points": 0}).execute()
+                            
+                            st.success(f"Successfully joined '{group_name}'! 🎉")
+                            st.rerun()
+                        except Exception as e:
+                            # אם הוא כבר חבר, יקפוץ ה-Exception בגלל ה-Primary Key הכפול
+                            st.error("You are already a member of this squad!")
+                    else:
+                        st.error("Invalid Code. Squad not found.")
+
+    # --- יצירת קבוצה חדשה ---
+    with col_create:
+        with st.form("create_squad_form", clear_on_submit=True):
+            st.write("**Create a New Squad**")
+            new_squad_name = st.text_input("New Squad Name:")
+            if st.form_submit_button("Create Squad"):
+                if new_squad_name:
+                    new_code = generate_group_code()
+                    try:
+                        # 1. יוצרים את הקבוצה בטבלת הקבוצות
+                        new_group = supabase.table("groups").insert({
+                            "name": new_squad_name, 
+                            "code": new_code, 
+                            "created_by": current_user
+                        }).execute().data
+                        
+                        if new_group:
+                            new_group_id = new_group[0]['id']
+                            # 2. מוסיפים את היוצר כחבר קבוצה
+                            supabase.table("group_members").insert({"group_id": new_group_id, "user": current_user}).execute()
+                            # 3. מאתחלים אותו בלידרבורד של הקבוצה החדשה
+                            supabase.table("leaderboard").insert({"group_id": new_group_id, "user": current_user, "points": 0}).execute()
+                            
+                            st.success(f"Squad created! Your invite code is {new_code} 🚀")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error creating squad: {e}")
         
 # --- Function that calculates when is Sunday ---
 def reset_squad_challenges():
