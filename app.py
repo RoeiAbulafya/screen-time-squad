@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd 
+import extra_streamlit_components as stx
 from datetime import datetime, timezone, timedelta
 from supabase import create_client
 import plotly.express as px
@@ -10,8 +11,22 @@ def generate_group_code():
 
 st.set_page_config(page_title="Screen Time Squad", layout="centered")
 
+# --- COOKIE MANAGER INITIALIZATION ---
+# אתחול מנהל העוגיות 
+@st.cache_resource(experimental_allow_widgets=True)
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
+
+# מנסים למשוך את שם המשתמש מהעוגייה (אם קיים)
+saved_user = cookie_manager.get(cookie="saved_username")
+
 # --- INITIALIZATION ---
-if "user_name" not in st.session_state: st.session_state["user_name"] = None
+# אם יש עוגייה, נכניס את המשתמש ישר. אם לא, נאתחל כ-None
+if "user_name" not in st.session_state: 
+    st.session_state["user_name"] = saved_user 
+
 if "tracked_apps" not in st.session_state:
     st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
 
@@ -44,16 +59,20 @@ if not st.session_state["user_name"]:
             name = st.text_input("Enter your name to join:")
             if st.button("Get Started 🚀"):
                 if name.strip():
-                    st.session_state["user_name"] = name.strip().capitalize()
+                    clean_name = name.strip().capitalize()
+                    
+                    # 1. שומרים ב-Session State לאפליקציה הנוכחית
+                    st.session_state["user_name"] = clean_name
+                    
+                    # 2. שומרים בעוגייה כדי שהדפדפן יזכור את המשתמש ל-30 יום!
+                    expire_date = datetime.datetime.now() + datetime.timedelta(days=30)
+                    cookie_manager.set("saved_username", clean_name, expires_at=expire_date)
+                    
                     st.rerun()
-        
+                    
     st.stop()    
 
 # --- TOP BAR ---
-active_id = st.session_state.get("active_group_id")
-current_user = st.session_state["user_name"]
-
-# 1. שליפת ה-ID של הקבוצה הפעילה (נוודא שאנחנו מנסים את המפתחות הנפוצים)
 active_id = st.session_state.get("active_group_id") or st.session_state.get("selected_group_id")
 current_user = st.session_state["user_name"]
 
@@ -82,120 +101,119 @@ def calculate_streak(user_name, all_logs):
         return 0
     
     streak = 0
-    current_date = datetime.now().date()
+    current_date = datetime.datetime.now().date()
     
     for log_date_str in user_dates:
-        log_date = datetime.strptime(log_date_str, "%Y-%m-%d").date()
+        log_date = datetime.datetime.strptime(log_date_str, "%Y-%m-%d").date()
         if (current_date - log_date).days == streak or (current_date - log_date).days == streak + 1:
             streak += 1
         else:
             break
     return streak
 
-user_streak = calculate_streak(st.session_state["user_name"], supabase.table("logs").select("*").execute().data)
-st.markdown(f"### Connected as: **{st.session_state['user_name']}** 🔥 {user_streak} days in a row!")
-# --- ודא שהמשתמש מחובר ---
-if "user_name" in st.session_state:
-    current_user = st.session_state["user_name"]
-    
+user_streak = calculate_streak(current_user, supabase.table("logs").select("*").execute().data)
+st.markdown(f"### Connected as: **{current_user}** 🔥 {user_streak} days in a row!")
     # משיכת הקבוצות שהמשתמש חבר בהן מתוך טבלת הקשר, כולל פרטי הקבוצה
-    user_groups_response = supabase.table("group_members").select("group_id, groups(id, name, code)").eq("user", current_user).execute()
-    user_groups_data = user_groups_response.data
-    
-    if user_groups_data:
-        # יצירת מילון שממפה את ה-ID של הקבוצה לשם ולמספר הקוד שלה
-        # חשוב: אנחנו מוודאים ש-'groups' לא ריק במקרה של חוסר סנכרון בדאטה-בייס
-        group_options = {
-            item['group_id']: {
-                "name": item['groups']['name'],
-                "code": item['groups']['code']
+user_groups_response = supabase.table("group_members").select("group_id, groups(id, name, code)").eq("user", current_user).execute()
+user_groups_data = user_groups_response.data
+ group_options = {}   
+if user_groups_data:
+    group_options = {
+        item['group_id']: {
+            "name": item['groups']['name'],
+            "code": item['groups']['code']
             }
-            for item in user_groups_data if item.get('groups')
-        }
+        for item in user_groups_data if item.get('groups')
+    }
         
-    with st.sidebar:
-        st.subheader("👥 My Squads")
-        current_user = st.session_state["user_name"]
+with st.sidebar:
+    st.subheader("👥 My Squads")
+    current_user = st.session_state["user_name"]
         
-        # הנחה: group_options כבר מוגדר בקוד שלך לפני ה-sidebar
-        if group_options:
-            group_ids = list(group_options.keys())
+    # הנחה: group_options כבר מוגדר בקוד שלך לפני ה-sidebar
+    if group_options:
+        group_ids = list(group_options.keys())
             
-            # שמירה על הבחירה הנוכחית
-            default_index = 0
-            if "active_group_id" in st.session_state and st.session_state["active_group_id"] in group_ids:
-                default_index = group_ids.index(st.session_state["active_group_id"])
+        # שמירה על הבחירה הנוכחית
+        default_index = 0
+        if "active_group_id" in st.session_state and st.session_state["active_group_id"] in group_ids:
+            default_index = group_ids.index(st.session_state["active_group_id"])
 
-            selected_group_id = st.selectbox(
-                "Select Active Squad:", 
-                options=group_ids, 
-                index=default_index,
-                format_func=lambda x: group_options[x]["name"]
-            )
+        selected_group_id = st.selectbox(
+            "Select Active Squad:", 
+            options=group_ids, 
+            index=default_index,
+            format_func=lambda x: group_options[x]["name"]
+        )
             
-            if st.session_state.get("active_group_id") != selected_group_id:
-                st.session_state["active_group_id"] = selected_group_id
+        if st.session_state.get("active_group_id") != selected_group_id:
+            st.session_state["active_group_id"] = selected_group_id
+            st.rerun()
+            
+        # הצגת קוד הזמנה
+        active_code = group_options[selected_group_id]["code"]
+        st.info(f"🔑 Invite Code: **{active_code}**")
+            
+        # --- כפתור יציאה מקבוצה ---
+        if st.button("🚪 Leave Squad"):
+            try:
+                supabase.table("group_members").delete().eq("group_id", selected_group_id).eq("user", current_user).execute()
+                supabase.table("leaderboard").delete().eq("group_id", selected_group_id).eq("user", current_user).execute()
+                st.success("You left the squad!")
+                st.session_state["active_group_id"] = None # איפוס
                 st.rerun()
+            except Exception as e:
+                st.error("Error leaving squad.")
             
-            # הצגת קוד הזמנה
-            active_code = group_options[selected_group_id]["code"]
-            st.info(f"🔑 Invite Code: **{active_code}**")
-            
-            # --- כפתור יציאה מקבוצה ---
-            if st.button("🚪 Leave Squad"):
-                try:
-                    supabase.table("group_members").delete().eq("group_id", selected_group_id).eq("user", current_user).execute()
-                    supabase.table("leaderboard").delete().eq("group_id", selected_group_id).eq("user", current_user).execute()
-                    st.success("You left the squad!")
-                    st.session_state["active_group_id"] = None # איפוס
-                    st.rerun()
-                except Exception as e:
-                    st.error("Error leaving squad.")
-            
-            st.divider()
+        st.divider()
 
-       # --- ניהול קבוצות בסיידבר (Join/Create) ---
-        with st.expander("➕ Manage Squads"):
+    # --- ניהול קבוצות בסיידבר (Join/Create) ---
+    with st.expander("➕ Manage Squads"):
             
-            # 1. ה-Radio חייב להיות מחוץ לטופס כדי לעדכן את הממשק בזמן אמת
-            tab_choice = st.radio("Action:", ["Join Squad", "Create Squad"])
+        # 1. ה-Radio חייב להיות מחוץ לטופס כדי לעדכן את הממשק בזמן אמת
+        tab_choice = st.radio("Action:", ["Join Squad", "Create Squad"])
             
-            # 2. פיצול לשני טפסים נפרדים בהתאם לבחירה
-            if tab_choice == "Join Squad":
-                with st.form("join_squad_form", clear_on_submit=True):
-                    join_code = st.text_input("Enter 6-Digit Code:")
-                    submit_join = st.form_submit_button("Join")
+        # 2. פיצול לשני טפסים נפרדים בהתאם לבחירה
+        if tab_choice == "Join Squad":
+            with st.form("join_squad_form", clear_on_submit=True):
+                join_code = st.text_input("Enter 6-Digit Code:")
+                submit_join = st.form_submit_button("Join")
                     
-                    if submit_join and join_code:
-                        group_data = supabase.table("groups").select("id").eq("code", join_code.upper()).execute().data
-                        if group_data:
-                            g_id = group_data[0]['id']
-                            # בדיקה אם המשתמש כבר בקבוצה כדי למנוע כפילויות
-                            existing_member = supabase.table("group_members").select("*").eq("group_id", g_id).eq("user", current_user).execute().data
-                            if not existing_member:
-                                supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
-                                supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
-                                st.success("Successfully Joined!")
-                                st.rerun()
-                            else:
-                                st.warning("You are already in this squad!")
+                if submit_join and join_code:
+                    group_data = supabase.table("groups").select("id").eq("code", join_code.upper()).execute().data
+                    if group_data:
+                        g_id = group_data[0]['id']
+                        # בדיקה אם המשתמש כבר בקבוצה כדי למנוע כפילויות
+                        existing_member = supabase.table("group_members").select("*").eq("group_id", g_id).eq("user", current_user).execute().data
+                        if not existing_member:
+                            supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
+                            supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
+                            st.success("Successfully Joined!")
+                            st.rerun()
                         else:
-                            st.error("Invalid Code.")
+                            st.warning("You are already in this squad!")
+                    else:
+                        st.error("Invalid Code.")
             
-            else: # Create Squad
-                with st.form("create_squad_form", clear_on_submit=True):
-                    new_name = st.text_input("New Squad Name:")
-                    submit_create = st.form_submit_button("Create")
-                    
-                    if submit_create and new_name:טו
-                    new_code = generate_group_code() 
-                    new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
-                    if new_g:
-                        g_id = new_g[0]['id']
-                        supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
-                        supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
-                        st.success(f"Created! Code: {new_code}")
-                        st.rerun()
+        else: # Create Squad
+    # פותחים את קופסת הטופס
+        with st.form("create_squad_form", clear_on_submit=True):
+            new_name = st.text_input("New Squad Name:")
+            submit_create = st.form_submit_button("Create")
+        
+        # בודקים אם לחצו על הכפתור ויש שם (באותה רמה של הכפתור)
+            if submit_create and new_name:
+            # כל הפעולות האלו קורות רק לאחר הלחיצה
+                new_code = generate_group_code() 
+                new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
+            
+            # אם הקבוצה נוצרה בהצלחה בטבלה הראשונה, נמשיך לשאר הטבלאות
+                if new_g:
+                    g_id = new_g[0]['id']
+                    supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
+                    supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
+                    st.success(f"Created! Code: {new_code}")
+                    st.rerun()
         
 # --- כאן מתחילים הטאבים שלך (tab1, tab2...) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
