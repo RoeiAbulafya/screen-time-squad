@@ -370,286 +370,257 @@ with tab1:
                             st.rerun()
                     except Exception as e:
                         st.error(f"Error creating squad: {e}")
-        
-# --- Function that calculates when is Sunday ---
-def reset_squad_challenges():
-    # עדכון נקודות הלידרבורד של כולם חזרה ל-0
-    users_data = supabase.table("leaderboard").select("user").execute().data
-    if users_data:
-        for u in users_data:
-            supabase.table("leaderboard").update({"points": 0}).eq("user", u['user']).execute()
+ #reset group challenge points (sunday or a button)       
+def reset_squad_challenges(group_id):
+    if group_id:
+        # מאפסים את הניקוד ל-0 רק עבור חברי הקבוצה הספציפית הזו
+        supabase.table("leaderboard").update({"points": 0}).eq("group_id", group_id).execute()
 
 # --- TAB 2: SQUAD CHALLENGES ---
 with tab2:
-    st.header("🏆 Squad Challenges")
+    active_id = st.session_state.get("active_group_id")
     
-    # --- 1. משיכת נתונים בסיסית ונקייה מהדאטה-בייס ---
-    all_logs = supabase.table("logs").select("*").execute().data
-    leaderboard_data = supabase.table("leaderboard").select("*").execute().data
-    settings_data = supabase.table("settings").select("*").execute().data
-    
-    settings_dict = {item['key']: item['value'] for item in settings_data}
-    last_reset_time = settings_dict.get("last_reset_time", "1970-01-01T00:00:00")
-    
-    # חיתוך מחרוזת האיפוס לפורמט נקי (YYYY-MM-DDTHH:MM:SS) למניעת בעיות השוואה
-    last_reset_clean = last_reset_time[:19].replace(" ", "T")
-    
-    SQUAD_POINTS_GOAL = 1000
-
-    # --- 2. חישוב חסין-תקלות של שעות מסך ---
-    total_hours_this_week = 0
-    for l in all_logs:
-        c_at = l.get('created_at')
-        if c_at: # מוודא שהתאריך לא ריק
-            c_at_clean = c_at[:19].replace(" ", "T")
-            if c_at_clean > last_reset_clean:
-                total_hours_this_week += l.get('hours', 0) + (l.get('minutes', 0) / 60)
-            
-    weekly_squad_points = sum(user.get('points', 0) for user in leaderboard_data)
-
-    # --- 3. תצוגת אתגר שעות המסך השבועי ---
-    st.subheader("⏱️ Weekly Screen Time Goal")
-    st.progress(min(total_hours_this_week / 100, 1.0))
-    st.write(f"Total Squad Screen Time: {total_hours_this_week:.1f} / 100 hours")
-    
-    st.divider()
-    
-    # --- 4. תצוגת אתגר הנקודות הקבוצתי ---
-    st.subheader("🌟 Weekly Squad Points Challenge")
-    st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
-    
-    progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
-    st.progress(progress_pts)
-    st.write(f"Squad Points: {weekly_squad_points} / {SQUAD_POINTS_GOAL}")
-    
-    if progress_pts >= 1.0:
-        st.success("Squad goal crushed! 🎉")
+    if not active_id:
+        st.warning("⚠️ You need to select or join a squad first! Go to the Dashboard tab.")
+    else:
+        st.header("🏆 Squad Challenges")
         
-    st.divider()
-    
-    # --- 5. כפתור איפוס ידני חסין זמנים (UTC) ---
-    st.subheader("⚙️ Management")
-    if st.button("🔄 Reset All Squad Challenges Now", use_container_width=True):
-        try:
-            # שומרים את הזמן ב-UTC בלבד כדי למנוע התנגשות מול הזמן של סופאבייס
-            now_utc_str = datetime.now(timezone.utc).isoformat()
-            supabase.table("settings").upsert({"key": "last_reset_time", "value": now_utc_str}).execute()
-            
-            reset_squad_challenges()
-            
-            st.success("All challenges have been reset successfully! 🚀")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Reset failed: {e}")
-    
-    if progress_pts >= 1.0:
-        st.success("Squad goal crushed! 🎉")
-    st.divider()
-    
-    st.header("🏆 Leaderboard")
-    leaderboard = supabase.table("leaderboard").select("*").order("points", desc=True).execute().data
-    
-    if leaderboard:
-        # בדיקה: אם יש לפחות 3 משתמשים, נציג את הפודיום המשוגע
-        if len(leaderboard) >= 3:
-            first_place = leaderboard[0]
-            second_place = leaderboard[1]
-            third_place = leaderboard[2]
-            
-            # יצירת 3 עמודות שוות
-            col1, col2, col3 = st.columns(3)
-            
-            # עמודה 1 (שמאל) - מקום שלישי (הכי נמוך, נדחף 100 פיקסלים למטה)
-            with col1:
-                st.markdown(f"""
-                <div style='text-align: center; margin-top: 100px; padding: 20px; background-color: #CD7F32; border-radius: 10px; color: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>
-                    <h3>🥉 3rd</h3>
-                    <h4>{third_place.get('user', 'Unknown')}</h4>
-                    <p><b>{third_place.get('points', 0)}</b> pts</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # עמודה 2 (אמצע) - מקום ראשון (הכי גבוה, לא נדחף בכלל)
-            with col2:
-                st.markdown(f"""
-                <div style='text-align: center; margin-top: 0px; padding: 25px; background-color: #FFD700; border-radius: 10px; color: black; box-shadow: 0px 4px 12px rgba(0,0,0,0.5);'>
-                    <h1>👑 1st</h1>
-                    <h2>{first_place.get('user', 'Unknown')}</h2>
-                    <p style='font-size: 20px;'><b>{first_place.get('points', 0)}</b> pts</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # עמודה 3 (ימין) - מקום שני (גובה בינוני, נדחף 50 פיקסלים למטה)
-            with col3:
-                st.markdown(f"""
-                <div style='text-align: center; margin-top: 50px; padding: 20px; background-color: #C0C0C0; border-radius: 10px; color: black; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>
-                    <h2>🥈 2nd</h2>
-                    <h3>{second_place.get('user', 'Unknown')}</h3>
-                    <p><b>{second_place.get('points', 0)}</b> pts</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # בונוס: אם בעתיד יצטרפו עוד אנשים לסקוואד (מעבר לטופ 3), נציג אותם בטבלה פשוטה מתחת לפודיום
-            if len(leaderboard) > 3:
-                st.write("")
-                st.write("### Rest of the Squad")
-                st.dataframe(pd.DataFrame(leaderboard[3:]), width='stretch')
-                
-        else:
-            # גיבוי: אם יש פחות מ-3 שחקנים רשומים כרגע, נציג טבלה רגילה כדי שלא יישבר העיצוב
-            st.dataframe(pd.DataFrame(leaderboard), width='stretch')
-    
-    st.subheader("✅ Daily Challenges")
-
-    current_user = st.session_state["user_name"]
-    now = datetime.now(timezone.utc) # עבודה עם אזורי זמן למניעת באגים
-
-    # שליפת כל האתגרים מהדאטה-בייס
-    all_challenges = supabase.table("challenges").select("*").execute().data
-
-    active_challenges = []
-    pending_challenges = []
-
-    # מיון ובדיקת פקיעת תוקף (הטריק העצלן)
-    for ch in all_challenges:
-        created_at = datetime.fromisoformat(ch['created_at'].replace('Z', '+00:00'))
-        time_passed = now - created_at
+        # --- 1. משיכת חברי הקבוצה הפעילה הנוכחית ---
+        members_data = supabase.table("group_members").select("user").eq("group_id", active_id).execute().data
+        squad_users = [m['user'] for m in members_data] if members_data else []
         
-        if ch.get('status') == 'pending':
-            # משיכת ההצבעות בצורה בטוחה (מונע שגיאות אם הערך ב-DB הוא Null)
-            yes_votes = ch.get('votes_yes') or []
-            no_votes = ch.get('votes_no') or []
-            yes_count = len(yes_votes)
-            no_count = len(no_votes)
+        # --- 2. משיכת נתונים מסוננת ומסודרת לפי הקבוצה הפעילה ---
+        all_logs = supabase.table("logs").select("*").execute().data
+        # הלידרבורד נשלף מסונן לקבוצה הנוכחית ומסודר מהגבוה לנמוך עבור הפודיום
+        leaderboard_data = supabase.table("leaderboard").select("*").eq("group_id", active_id).order("points", desc=True).execute().data
+        challenges_data = supabase.table("challenges").select("*").eq("group_id", active_id).execute().data
+        settings_data = supabase.table("settings").select("*").execute().data 
+        
+        # סינון שעות מסך: סופרים רק את הלוגים של חברי הקבוצה הזו
+        group_logs = [log for log in all_logs if log['user'] in squad_users]
+        
+        settings_dict = {item['key']: item['value'] for item in settings_data}
+        last_reset_time = settings_dict.get("last_reset_time", "1970-01-01T00:00:00")
+        last_reset_clean = last_reset_time[:19].replace(" ", "T")
+        
+        SQUAD_POINTS_GOAL = 1000
+
+        # --- 3. חישוב שעות מסך קבוצתיות לשבוע הנוכחי ---
+        total_hours_this_week = 0
+        for l in group_logs:
+            c_at = l.get('created_at')
+            if c_at:
+                c_at_clean = c_at[:19].replace(" ", "T")
+                if c_at_clean > last_reset_clean:
+                    total_hours_this_week += l.get('hours', 0) + (l.get('minutes', 0) / 60)
+                
+        weekly_squad_points = sum(user.get('points', 0) for user in leaderboard_data)
+
+        # --- 4. תצוגת אתגר שעות המסך השבועי ---
+        st.subheader("⏱️ Weekly Screen Time Goal")
+        st.progress(min(total_hours_this_week / 100, 1.0))
+        st.write(f"Total Squad Screen Time: {total_hours_this_week:.1f} / 100 hours")
+        
+        st.divider()
+        
+        # --- 5. תצוגת אתגר הנקודות הקבוצתי ---
+        st.subheader("🌟 Weekly Squad Points Challenge")
+        st.markdown(f"**Weekly Goal:** Reach **{SQUAD_POINTS_GOAL}** total points!")
+        
+        progress_pts = min(weekly_squad_points / SQUAD_POINTS_GOAL, 1.0)
+        st.progress(progress_pts)
+        st.write(f"Squad Points: {weekly_squad_points} / {SQUAD_POINTS_GOAL}")
+        
+        if progress_pts >= 1.0:
+            st.success("Squad goal crushed! 🎉")
             
-            # 1. מסלול ירוק (Fast-Track): האם הושג רוב של 2 חברים? (שנה את המספר לפי גודל הקבוצה שלכם)
-            if yes_count >= 2:
-                # האתגר אושר מיידית! מעדכנים בדאטה-בייס
-                supabase.table("challenges").update({"status": "approved"}).eq("id", ch['id']).execute()
-                # משנים את הסטטוס גם מקומית כדי שיופיע מיד למטה בלי צורך ברענון נוסף
-                ch['status'] = 'approved' 
+        st.divider()
+        
+        # --- 6. כפתור איפוס ידני קבוצתי ---
+        st.subheader("⚙️ Management")
+        if st.button("🔄 Reset All Squad Challenges Now", use_container_width=True):
+            try:
+                now_utc_str = datetime.now(timezone.utc).isoformat()
+                supabase.table("settings").upsert({"key": "last_reset_time", "value": now_utc_str}).execute()
+                reset_squad_challenges(active_id)
+                st.success("All challenges for this squad have been reset successfully! 🚀")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Reset failed: {e}")
+                
+        st.divider()
+
+        # --- 7. הלידרבורד והפודיום המעוצב (מסונן לקבוצה) ---
+        st.header("🏆 Leaderboard")
+        if leaderboard_data:
+            if len(leaderboard_data) >= 3:
+                first_place = leaderboard_data[0]
+                second_place = leaderboard_data[1]
+                third_place = leaderboard_data[2]
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown(f"""
+                    <div style='text-align: center; margin-top: 100px; padding: 20px; background-color: #CD7F32; border-radius: 10px; color: white; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>
+                        <h3>🥉 3rd</h3>
+                        <h4>{third_place.get('user', 'Unknown')}</h4>
+                        <p><b>{third_place.get('points', 0)}</b> pts</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with col2:
+                    st.markdown(f"""
+                    <div style='text-align: center; margin-top: 0px; padding: 25px; background-color: #FFD700; border-radius: 10px; color: black; box-shadow: 0px 4px 12px rgba(0,0,0,0.5);'>
+                        <h1>👑 1st</h1>
+                        <h2>{first_place.get('user', 'Unknown')}</h2>
+                        <p style='font-size: 20px;'><b>{first_place.get('points', 0)}</b> pts</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with col3:
+                    st.markdown(f"""
+                    <div style='text-align: center; margin-top: 50px; padding: 20px; background-color: #C0C0C0; border-radius: 10px; color: black; box-shadow: 2px 2px 5px rgba(0,0,0,0.3);'>
+                        <h2>🥈 2nd</h2>
+                        <h3>{second_place.get('user', 'Unknown')}</h3>
+                        <p><b>{second_place.get('points', 0)}</b> pts</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                if len(leaderboard_data) > 3:
+                    st.write("")
+                    st.write("### Rest of the Squad")
+                    st.dataframe(pd.DataFrame(leaderboard_data[3:]), width='stretch')
+            else:
+                st.dataframe(pd.DataFrame(leaderboard_data), width='stretch')
+        
+        st.divider()
+
+        # --- 8. לוגיקת האתגרים היומיים (הפרלמנט והפעילים) ---
+        st.subheader("✅ Daily Challenges")
+        current_user = st.session_state["user_name"]
+        now = datetime.now(timezone.utc)
+        
+        active_challenges = []
+        pending_challenges = []
+        
+        for ch in challenges_data:
+            created_at = datetime.fromisoformat(ch['created_at'].replace('Z', '+00:00'))
+            time_passed = now - created_at
+            
+            if ch.get('status') == 'pending':
+                yes_votes = ch.get('votes_yes') or []
+                no_votes = ch.get('votes_no') or []
+                yes_count = len(yes_votes)
+                no_count = len(no_votes)
+                
+                # חישוב רוב דינמי חכם: מבוסס על כמות החברים הנוכחית בקבוצה הזו!
+                required_votes = max(2, (len(squad_users) // 2) + 1)
+                
+                if yes_count >= required_votes:
+                    supabase.table("challenges").update({"status": "approved"}).eq("id", ch['id']).execute()
+                    ch['status'] = 'approved'
+                    active_challenges.append(ch)
+                elif time_passed.total_seconds() >= 86400:
+                    if yes_count > no_count:
+                        supabase.table("challenges").update({"status": "approved"}).eq("id", ch['id']).execute()
+                        active_challenges.append(ch)
+                    else:
+                        supabase.table("challenges").delete().eq("id", ch['id']).execute()
+                else:
+                    pending_challenges.append(ch)
+            else:
                 active_challenges.append(ch)
                 
-            # 2. אם אין עדיין אישור מהיר, נבדוק אם עברו 24 שעות שלמות
-            elif time_passed.total_seconds() >= 86400: 
-                if yes_count > no_count:
-                    # עבר הזמן ויש רוב - האתגר אושר!
-                    supabase.table("challenges").update({"status": "approved"}).eq("id", ch['id']).execute()
-                    active_challenges.append(ch)
-                else:
-                    # עבר הזמן ואין רוב בעד - האתגר נדחה ונמחק
-                    supabase.table("challenges").delete().eq("id", ch['id']).execute()
-            
-            # 3. לא עברו 24 שעות ועדיין אין רוב מוחלט - האתגר נשאר בפרלמנט
-            else:
-                pending_challenges.append(ch)
-                
-        else:
-            # כל מה שכבר אושר בעבר (status != pending) נכנס מיד לאתגרים הפעילים
-            active_challenges.append(ch)
-
-   # --- חלק א': אתגרים פעילים ---
-    if active_challenges:
-        st.write("### 🎯 Active Challenges")
-        with st.form("challenges_form"):
-            # מילון שישמור אילו צ'קבוקסים סומנו עכשיו
-            newly_completed = {}
-            
-            for ch in active_challenges:
-                # בודקים מי כבר השלים את האתגר (מונע קריסה אם העמודה ריקה)
-                completed_by = ch.get('completed_by') or []
-                
-                if current_user in completed_by:
-                    # המשתמש כבר עשה את האתגר - נציג כנעול
-                    st.checkbox(f"✅ {ch['task']} ({ch['points']} pts) - Completed!", value=True, disabled=True, key=f"chk_{ch['id']}")
-                else:
-                    # המשתמש עדיין לא עשה את האתגר - פתוח לסימון
-                    newly_completed[ch['id']] = st.checkbox(f"⬜ {ch['task']} ({ch['points']} pts)", key=f"chk_{ch['id']}")
-                    
-            submit_btn = st.form_submit_button("Update Score")
-            
-            if submit_btn:
-                points_to_add = 0
-                
-                for ch_id, is_checked in newly_completed.items():
-                    if is_checked:
-                        # מוצאים את האתגר הספציפי מתוך הרשימה
-                        ch_data = next(c for c in active_challenges if c['id'] == ch_id)
-                        points_to_add += ch_data['points']
-                        
-                        # מעדכנים בדאטה-בייס שהמשתמש הזה השלים את האתגר
-                        updated_completed_by = (ch_data.get('completed_by') or []) + [current_user]
-                        supabase.table("challenges").update({"completed_by": updated_completed_by}).eq("id", ch_id).execute()
-                
-                if points_to_add > 0:
-                    # מושכים את הניקוד הנוכחי של המשתמש מהלידרבורד
-                    user_record = supabase.table("leaderboard").select("points").eq("user", current_user).execute().data
-                    if user_record:
-                        current_points = user_record[0].get("points", 0)
-                        # מעדכנים את הניקוד החדש
-                        supabase.table("leaderboard").update({"points": current_points + points_to_add}).eq("user", current_user).execute()
-                        
-                        st.success(f"Awesome! You earned {points_to_add} points! 🎉")
-                        st.rerun()
+        # --- חלק א': אתגרים פעילים ---
+        if active_challenges:
+            st.write("### 🎯 Active Challenges")
+            with st.form("challenges_form"):
+                newly_completed = {}
+                for ch in active_challenges:
+                    completed_by = ch.get('completed_by') or []
+                    if current_user in completed_by:
+                        st.checkbox(f"✅ {ch['task']} ({ch['points']} pts) - Completed!", value=True, disabled=True, key=f"chk_{ch['id']}")
                     else:
-                        st.error("Could not find your user in the leaderboard.")
-                else:
-                    st.warning("You didn't check any new challenges.")
-
-    else:
-        st.info("No active challenges yet. Go suggest one below!")
-    # --- חלק ב': אתגרים בהצבעה (הפרלמנט) ---
-    if pending_challenges:
-        st.write("### 🗳️ Challenges Under Review (24h)")
+                        newly_completed[ch['id']] = st.checkbox(f"⬜ {ch['task']} ({ch['points']} pts)", key=f"chk_{ch['id']}")
+                        
+                submit_btn = st.form_submit_button("Update Score")
+                if submit_btn:
+                    points_to_add = 0
+                    for ch_id, is_checked in newly_completed.items():
+                        if is_checked:
+                            ch_data = next(c for c in active_challenges if c['id'] == ch_id)
+                            points_to_add += ch_data['points']
+                            updated_completed_by = (ch_data.get('completed_by') or []) + [current_user]
+                            supabase.table("challenges").update({"completed_by": updated_completed_by}).eq("id", ch_id).execute()
+                    
+                    if points_to_add > 0:
+                        # עדכון ניקוד בלידרבורד תחת הקבוצה הספציפית בלבד
+                        user_record = supabase.table("leaderboard").select("points").eq("group_id", active_id).eq("user", current_user).execute().data
+                        if user_record:
+                            current_points = user_record[0].get("points", 0)
+                            supabase.table("leaderboard").update({"points": current_points + points_to_add}).eq("group_id", active_id).eq("user", current_user).execute()
+                            st.success(f"Awesome! You earned {points_to_add} points! 🎉")
+                            st.rerun()
+                        else:
+                            st.error("Could not find your user in this squad's leaderboard.")
+                    else:
+                        st.warning("You didn't check any new challenges.")
+        else:
+            st.info("No active challenges yet. Go suggest one below!")
+            
+        # --- חלק ב': אתגרים בהצבעה (הפרלמנט כולל טופס עריכה המקורית שלך) ---
+        if pending_challenges:
+            st.write("### 🗳️ Challenges Under Review (24h)")
+            for ch in pending_challenges:
+                created_at = datetime.fromisoformat(ch['created_at'].replace('Z', '+00:00'))
+                time_left = timedelta(hours=24) - (now - created_at)
+                minutes_left = int(time_left.total_seconds() // 60)
+                
+                with st.expander(f"🤔 {ch['task']} ({ch['points']} pts) — {max(0, minutes_left // 60)}h {max(0, minutes_left % 60)}m left"):
+                    yes_votes = ch.get('votes_yes') or []
+                    no_votes = ch.get('votes_no') or []
+                    
+                    # כפתורי הצבעה
+                    col_v1, col_v2 = st.columns(2)
+                    with col_v1:
+                        if st.button(f"👍 Approve ({len(yes_votes)})", key=f"yes_{ch['id']}"):
+                            if current_user not in yes_votes:
+                                new_yes = yes_votes + [current_user]
+                                new_no = [u for u in no_votes if u != current_user]
+                                supabase.table("challenges").update({"votes_yes": new_yes, "votes_no": new_no}).eq("id", ch['id']).execute()
+                                st.rerun()
+                    with col_v2:
+                        if st.button(f"👎 Reject ({len(no_votes)})", key=f"no_{ch['id']}"):
+                            if current_user not in no_votes:
+                                new_no = no_votes + [current_user]
+                                new_yes = [u for u in yes_votes if u != current_user]
+                                supabase.table("challenges").update({"votes_yes": new_yes, "votes_no": new_no}).eq("id", ch['id']).execute()
+                                st.rerun()
+                                
+                    # טופס עריכה מקורי (נשמר במלואו!)
+                    st.write("---")
+                    with st.form(f"edit_form_{ch['id']}"):
+                        edit_task = st.text_input("Edit Challenge Name", value=ch['task'])
+                        edit_points = st.number_input("Edit Points", min_value=1, value=int(ch['points']))
+                        if st.form_submit_button("Suggest Edit Changes"):
+                            supabase.table("challenges").update({"task": edit_task, "points": edit_points}).eq("id", ch['id']).execute()
+                            st.rerun()
         
-        for ch in pending_challenges:
-            created_at = datetime.fromisoformat(ch['created_at'].replace('Z', '+00:00'))
-            time_left = timedelta(hours=24) - (now - created_at)
-            minutes_left = int(time_left.total_seconds() // 60)
-            
-            # תצוגת כרטיס לכל אתגר בהצבעה
-            with st.expander(f"🤔 {ch['task']} ({ch['points']} pts) — {minutes_left // 60}h {minutes_left % 60}m left"):
-                
-                # 1. מנגנון הצבעה
-                yes_votes = ch.get('votes_yes', [])
-                no_votes = ch.get('votes_no', [])
-                
-                col_v1, col_v2 = st.columns(2)
-                with col_v1:
-                    if st.button(f"👍 Approve ({len(yes_votes)})", key=f"yes_{ch['id']}"):
-                        if current_user not in yes_votes:
-                            new_yes = yes_votes + [current_user]
-                            new_no = [u for u in no_votes if u != current_user] # הסרה מהצבעה הפוכה אם הייתה
-                            supabase.table("challenges").update({"votes_yes": new_yes, "votes_no": new_no}).eq("id", ch['id']).execute()
-                            st.rerun()
-                with col_v2:
-                    if st.button(f"👎 Reject ({len(no_votes)})", key=f"no_{ch['id']}"):
-                        if current_user not in no_votes:
-                            new_no = no_votes + [current_user]
-                            new_yes = [u for u in yes_votes if u != current_user]
-                            supabase.table("challenges").update({"votes_yes": new_yes, "votes_no": new_no}).eq("id", ch['id']).execute()
-                            st.rerun()
-                
-                # 2. מנגנון עריכה (פתוח לכולם במהלך ה-24 שעות)
-                st.write("---")
-                with st.form(f"edit_form_{ch['id']}"):
-                    edit_task = st.text_input("Edit Challenge Name", value=ch['task'])
-                    edit_points = st.number_input("Edit Points", min_value=1, value=int(ch['points']))
-                    if st.form_submit_button("Suggest Edit Changes"):
-                        supabase.table("challenges").update({"task": edit_task, "points": edit_points}).eq("id", ch['id']).execute()
-                        st.rerun()
-            
-    st.subheader("➕ Suggest a New Challenge")
-    with st.form("add_challenge_form", clear_on_submit=True):
-        new_task = st.text_input("What is the challenge?")
-        new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
-        if st.form_submit_button("Submit Suggestion"):
-            supabase.table("challenges").insert({
-                "task": new_task, 
-                "points": new_points, 
-                "created_by": st.session_state["user_name"]
-            }).execute()
-            st.rerun()
+        # --- חלק ג': הצעת אתגר חדש (מוצמד אוטומטית לקבוצה הפעילה) ---
+        st.subheader("➕ Suggest a New Challenge")
+        with st.form("add_challenge_form", clear_on_submit=True):
+            new_task = st.text_input("What is the challenge?")
+            new_points = st.number_input("How many points is it worth?", min_value=1, step=1)
+            if st.form_submit_button("Submit Suggestion"):
+                if new_task:
+                    supabase.table("challenges").insert({
+                        "task": new_task, 
+                        "points": new_points, 
+                        "created_by": current_user,
+                        "group_id": active_id  # שיוך לקבוצה
+                    }).execute()
+                    st.rerun()
 
 # --- TAB 3: Squad Feed ---
 with tab3:
