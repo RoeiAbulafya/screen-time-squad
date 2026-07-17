@@ -60,7 +60,7 @@ if not st.session_state["user_name"]:
                     st.session_state["user_name"] = clean_name
                     
                     # 2. שומרים בעוגייה כדי שהדפדפן יזכור את המשתמש ל-30 יום!
-                    expire_date = datetime.datetime.now() + datetime.timedelta(days=30)
+                    expire_date = datetime.now() + timedelta(days=30)
                     cookie_manager.set("saved_username", clean_name, expires_at=expire_date)
                     
                     st.rerun()
@@ -96,10 +96,10 @@ def calculate_streak(user_name, all_logs):
         return 0
     
     streak = 0
-    current_date = datetime.datetime.now().date()
+    current_date = datetime.now().date()
     
     for log_date_str in user_dates:
-        log_date = datetime.datetime.strptime(log_date_str, "%Y-%m-%d").date()
+        log_date = datetime.strptime(log_date_str, "%Y-%m-%d").date()
         if (current_date - log_date).days == streak or (current_date - log_date).days == streak + 1:
             streak += 1
         else:
