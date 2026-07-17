@@ -187,8 +187,7 @@ if "user_name" in st.session_state:
                     new_name = st.text_input("New Squad Name:")
                     submit_create = st.form_submit_button("Create")
                     
-                    if submit_create and new_name:
-                        # יצירת קוד רנדומלי (בהנחה שפונקציית generate_group_code() קיימת אצלך)
+                    if submit_create and new_name:טו
                         new_code = generate_group_code() 
                         new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
                         if new_g:
@@ -735,43 +734,107 @@ with tab3:
 
 # --- TAB 4: INSIGHTS ---
 with tab4:
-    st.header("✨ Personal Insights")
+    st.header("✨ Personal Insights & Goals")
     
-    my_logs = [l for l in all_logs if l['user'] == st.session_state["user_name"]]
+    current_user = st.session_state["user_name"]
     
-    if len(my_logs) >= 2:
-        my_logs_sorted = sorted(my_logs, key=lambda x: x['date'], reverse=True)
-        latest_log = my_logs_sorted[0]
-        previous_log = my_logs_sorted[1]
-        
-        latest_time = latest_log.get('hours', 0) + (latest_log.get('minutes', 0) / 60)
-        previous_time = previous_log.get('hours', 0) + (previous_log.get('minutes', 0) / 60)
-        
-        with st.container(border=True):
-            st.subheader("📊 Your Trend")
-            if latest_time < previous_time:
-                diff = previous_time - latest_time
-                percent_drop = int((diff / previous_time) * 100) if previous_time > 0 else 0
-                st.success(f"Awesome! You decreased your screen time by **{percent_drop}%** compared to your last log. Keep it up!")
-            elif latest_time > previous_time:
-                st.warning("Your screen time has gone up slightly. Try to notice which app is taking up most of your time today.")
-            else:
-                st.info("Your screen time is stable. Let's try to shave off half an hour tomorrow!")
-
-        with st.container(border=True):
-            st.subheader("⏳ Time Reclaimed")
-            daily_goal = 4.0 
-            if latest_time < daily_goal:
-                saved_time = daily_goal - latest_time
-                saved_h = int(saved_time)
-                saved_m = int((saved_time - saved_h) * 60)
-                
-                st.markdown(f"### You managed to save **{saved_h}h {saved_m}m** today! 🎉")
-                st.markdown("That's definitely enough time to sit down with the maps and plan your trekking route in Norway, or jump into a focused bouldering session without distractions.")
-            else:
-                st.markdown("You haven't saved time below your goal (4 hours) today. Tomorrow is a new day!")
+    # 1. שליפת נתוני המשתמש מה-Database
+    user_logs = supabase.table("logs").select("*").eq("user", current_user).execute().data
+    
+    if not user_logs:
+        st.info("You don't have any logged data yet. Start logging your screen time in the Home tab to see your insights!")
     else:
-        st.info("We need at least 2 logs to start generating smart insights for you. Keep tracking!")
+        # המרה ל-DataFrame וסידור לפי תאריך (מהחדש לישן)
+        df = pd.DataFrame(user_logs)
+        df['date'] = pd.to_datetime(df['date'])
+        df['total_hours'] = df['hours'] + (df['minutes'] / 60)
+        df = df.sort_values('date', ascending=False)
+        
+        # --- 2. חישובים סטטיסטיים ---
+        # לוקחים את 7 הימים האחרונים שיש להם לוג (או פחות אם אין 7)
+        last_7_logs = df.head(7)
+        weekly_avg = last_7_logs['total_hours'].mean()
+        
+        # לוקחים את הלוג האחרון (אתמול/היום)
+        latest_log = df.iloc[0]
+        latest_time = latest_log['total_hours']
+        latest_date_str = latest_log['date'].strftime('%b %d') # למשל: Jul 17
+        
+        # --- 3. אזור הגדרת יעד אישי ---
+        st.subheader("🎯 Set Your Daily Goal")
+        
+        # יעד מומלץ: 10% פחות מהממוצע השבועי (מעוגל לחצי שעה קרובה)
+        recommended_goal = max(0.5, round((weekly_avg * 0.9) * 2) / 2)
+        
+        # שומרים ב-Session State כדי שהיעד יישמר בזמן הניווט באפליקציה
+        if "daily_goal" not in st.session_state:
+            st.session_state["daily_goal"] = recommended_goal
+            
+        col_goal1, col_goal2 = st.columns([1, 1])
+        with col_goal1:
+            user_goal = st.number_input(
+                "My Screen Time Goal (Hours):", 
+                min_value=0.5, max_value=24.0, step=0.5, 
+                value=float(st.session_state["daily_goal"])
+            )
+            st.session_state["daily_goal"] = user_goal
+        with col_goal2:
+            st.markdown(f"""
+            <div style='padding: 30px 0px 0px 10px; color: #a0a0a0;'>
+                💡 <b>Tip:</b> Based on your 7-day average, try aiming for <b>{recommended_goal}h</b>!
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.divider()
+        
+        # --- 4. אזור תצוגת ביצועים (Metrics) ---
+        st.subheader("📊 Your Performance")
+        
+        m1, m2, m3 = st.columns(3)
+        
+        # פונקציית עזר להמרת שעות עשרוניות לתצוגה יפה (למשל 4h 30m)
+        def format_hm(hours_float):
+            h = int(hours_float)
+            m = int(round((hours_float - h) * 60))
+            return f"{h}h {m}m"
+        
+        # חישוב הדלתא לעומת היעד
+        delta_val = latest_time - user_goal
+        
+        # Streamlit Metric 1: הלוג האחרון לעומת היעד
+        # delta_color="inverse" גורם לכך שמספר חיובי (חרג מהיעד) יהיה אדום, ושלילי (עמד ביעד) יהיה ירוק!
+        m1.metric(
+            label=f"Latest Log ({latest_date_str})", 
+            value=format_hm(latest_time),
+            delta=f"{round(delta_val, 1)}h (Goal difference)",
+            delta_color="inverse" 
+        )
+        
+        # Streamlit Metric 2: הממוצע השבועי
+        m2.metric(
+            label="7-Day Average", 
+            value=format_hm(weekly_avg)
+        )
+        
+        # Streamlit Metric 3: היעד שהוגדר
+        m3.metric(
+            label="Daily Goal", 
+            value=f"{user_goal}h"
+        )
+        
+        # --- 5. פידבק חכם ודינמי ---
+        st.write("") # קצת רווח נשימה
+        
+        if latest_time <= user_goal:
+            st.success("🎉 Awesome job! Your last log was under your daily goal. Keep up the great work!")
+        else:
+            st.warning(f"You were {round(delta_val, 1)} hours over your goal. Tomorrow is a new opportunity! 💪")
+            
+        # השוואה לממוצע לזיהוי מגמה
+        if latest_time < weekly_avg:
+            st.info("📉 Good trend: Your latest screen time is lower than your 7-day average. You are improving!")
+        elif latest_time > weekly_avg:
+            st.info("📈 Watch out: Your latest screen time was higher than your recent average. Try to break the streak!")
         
 # --- TAB 5: PERSONAL GROWTH  ---
 with tab5:
