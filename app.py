@@ -169,21 +169,18 @@ with st.sidebar:
 
     # --- ניהול קבוצות בסיידבר (Join/Create) ---
     with st.expander("➕ Manage Squads"):
-            
-        # 1. ה-Radio חייב להיות מחוץ לטופס כדי לעדכן את הממשק בזמן אמת
         tab_choice = st.radio("Action:", ["Join Squad", "Create Squad"])
-            
-        # 2. פיצול לשני טפסים נפרדים בהתאם לבחירה
+        
         if tab_choice == "Join Squad":
             with st.form("join_squad_form", clear_on_submit=True):
                 join_code = st.text_input("Enter 6-Digit Code:")
                 submit_join = st.form_submit_button("Join")
-                    
+                
                 if submit_join and join_code:
                     group_data = supabase.table("groups").select("id").eq("code", join_code.upper()).execute().data
                     if group_data:
                         g_id = group_data[0]['id']
-                        # בדיקה אם המשתמש כבר בקבוצה כדי למנוע כפילויות
+                        # בדיקה אם המשתמש כבר בקבוצה
                         existing_member = supabase.table("group_members").select("*").eq("group_id", g_id).eq("user", current_user).execute().data
                         if not existing_member:
                             supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
@@ -194,26 +191,22 @@ with st.sidebar:
                             st.warning("You are already in this squad!")
                     else:
                         st.error("Invalid Code.")
-            
-    else: # Create Squad
-    # פותחים את קופסת הטופס
-        with st.form("create_squad_form", clear_on_submit=True):
-            new_name = st.text_input("New Squad Name:")
-            submit_create = st.form_submit_button("Create")
-        
-        # בודקים אם לחצו על הכפתור ויש שם (באותה רמה של הכפתור)
-            if submit_create and new_name:
-            # כל הפעולות האלו קורות רק לאחר הלחיצה
-                new_code = generate_group_code() 
-                new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
-            
-            # אם הקבוצה נוצרה בהצלחה בטבלה הראשונה, נמשיך לשאר הטבלאות
-                if new_g:
-                    g_id = new_g[0]['id']
-                    supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
-                    supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
-                    st.success(f"Created! Code: {new_code}")
-                    st.rerun()
+                        
+        else: # Create Squad
+            with st.form("create_squad_form", clear_on_submit=True):
+                new_name = st.text_input("New Squad Name:")
+                submit_create = st.form_submit_button("Create")
+                
+                if submit_create and new_name:
+                    new_code = generate_group_code() 
+                    new_g = supabase.table("groups").insert({"name": new_name, "code": new_code, "created_by": current_user}).execute().data
+                    
+                    if new_g:
+                        g_id = new_g[0]['id']
+                        supabase.table("group_members").insert({"group_id": g_id, "user": current_user}).execute()
+                        supabase.table("leaderboard").insert({"group_id": g_id, "user": current_user, "points": 0}).execute()
+                        st.success(f"Created! Code: {new_code}")
+                        st.rerun()
         
 # --- כאן מתחילים הטאבים שלך (tab1, tab2...) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
