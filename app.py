@@ -113,21 +113,29 @@ if "user_name" in st.session_state:
             for item in user_groups_data if item.get('groups')
         }
         
-        # כותרת הסיידבר
+       # כותרת הסיידבר
         st.sidebar.title("👥 My Squads")
         
         # יצירת רשימה של ה-IDs עבור ה-selectbox
         group_ids = list(group_options.keys())
         
-        # תיבה נפתחת לבחירת קבוצה. ה-format_func גורם לזה להציג את השם היפה ולא את המספר ID
+        # שמירה על הבחירה הנוכחית של המשתמש שלא תתאפס בריצה מחדש
+        default_index = 0
+        if "active_group_id" in st.session_state and st.session_state["active_group_id"] in group_ids:
+            default_index = group_ids.index(st.session_state["active_group_id"])
+
+        # תיבה נפתחת לבחירת קבוצה עם אינדקס דיפולטיבי מוגן
         selected_group_id = st.sidebar.selectbox(
             "Select Active Squad:", 
             options=group_ids, 
+            index=default_index,
             format_func=lambda x: group_options[x]["name"]
         )
         
-        # שומרים את ה-ID של הקבוצה הפעילה ב-Session State כדי שכל הטאבים יכירו אותו
-        st.session_state["active_group_id"] = selected_group_id
+        # --- התיקון הקריטי: אם המשתמש שינה קבוצה, נעדכן מיד ונריץ מחדש את הדף! ---
+        if st.session_state.get("active_group_id") != selected_group_id:
+            st.session_state["active_group_id"] = selected_group_id
+            st.rerun()
         
         # שולפים את הקוד של הקבוצה הפעילה ומציגים אותו למטה בסיידבר
         active_code = group_options[selected_group_id]["code"]
