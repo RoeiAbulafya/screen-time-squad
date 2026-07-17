@@ -50,11 +50,21 @@ if not st.session_state["user_name"]:
     st.stop()    
 
 # --- TOP BAR ---
-st.title(f"📱 Screen Time Squad | {st.session_state['user_name']}")
-users_data = supabase.table("logs").select("user").execute().data
-unique_users = sorted(list(set([u['user'] for u in users_data]))) if users_data else []
-st.caption(f"Squad Members: {', '.join(unique_users) if unique_users else 'Be the first to join!'}")
+active_id = st.session_state.get("active_group_id")
+current_user = st.session_state["user_name"]
 
+st.title(f"📱 Screen Time Squad | {current_user}")
+
+# מציגים חברי קבוצה רק אם המשתמש באמת משויך לקבוצה פעילה
+if active_id:
+    members_data = supabase.table("group_members").select("user").eq("group_id", active_id).execute().data
+    squad_users = [m['user'] for m in members_data] if members_data else []
+    st.caption(f"Squad Members: {', '.join(squad_users)}")
+else:
+    st.caption("Squad Members: None (You are not in a squad yet)")
+
+st.subheader(f"Connected as: {current_user} 🔥 {st.session_state.get('streak', 0)} days in a row!")
+ת
 # --- STREAK LOGIC ---
 def calculate_streak(user_name, all_logs):
     user_dates = sorted([log['date'] for log in all_logs if log['user'] == user_name], reverse=True)
@@ -134,8 +144,12 @@ with tab1:
     st.header("Log Your Time")
     log_date = st.date_input("Date")
     
+    # משתנים כלליים לשמוש בהמשך
+    active_id = st.session_state.get("active_group_id")
+    current_user = st.session_state["user_name"]
+    
     # שליפת נתונים קיימים לתאריך הנבחר
-    existing_user_log = supabase.table("logs").select("*").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
+    existing_user_log = supabase.table("logs").select("*").eq("user", current_user).eq("date", str(log_date)).execute().data
     
     if existing_user_log:
         current_log = existing_user_log[0]
@@ -147,7 +161,6 @@ with tab1:
         for app_name in existing_apps.keys():
             if app_name not in st.session_state["tracked_apps"]:
                 st.session_state["tracked_apps"].append(app_name)
-        # --------------------------------------------------------
     else:
         default_hours = 0
         default_minutes = 0
@@ -166,7 +179,7 @@ with tab1:
     if "TikTok" in st.session_state["tracked_apps"]:
         st.session_state["tracked_apps"].remove("TikTok")
 
-    # 2. לולאת קלט לאפליקציות (כוללת כעת גם את האפליקציות שנשלפו מההיסטוריה של אותו יום)
+    # 2. לולאת קלט לאפליקציות
     app_logs = {}
     for app in st.session_state["tracked_apps"]:
         st.markdown(f"**{app}**")
@@ -192,13 +205,13 @@ with tab1:
 
     # 4. שמירת נתונים
     if st.button("Save Daily Log"):
-        existing_log = supabase.table("logs").select("id").eq("user", st.session_state["user_name"]).eq("date", str(log_date)).execute().data
+        existing_log = supabase.table("logs").select("id").eq("user", current_user).eq("date", str(log_date)).execute().data
         if existing_log:
             supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
             
         data_to_insert = {
             "date": str(log_date), 
-            "user": st.session_state["user_name"], 
+            "user": current_user, 
             "hours": hours_input, 
             "minutes": minutes_input, 
             "app_data": app_logs
@@ -209,16 +222,30 @@ with tab1:
 
     st.divider()
     
-    # --- 5. הצגת הגרפים עם בחירת תאריך מותאמת ---
+    # =========================================================
+    # --- 5. הצגת הגרפים (מוגנים ומסוננים לפי לוגיקת קבוצות) ---
+    # =========================================================
     all_logs = supabase.table("logs").select("*").execute().data
+
+    # לוגיקת סינון: קביעה אילו משתמשים מותר לראות בגרפים
+    if not active_id:
+        # משתמש ללא קבוצה רואה רק את עצמו
+        allowed_users = [current_user]
+    else:
+        # משתמש בקבוצה רואה את כל חברי הקבוצה שלו בלבד
+        members_data = supabase.table("group_members").select("user").eq("group_id", active_id).execute().data
+        allowed_users = [m['user'] for m in members_data] if members_data else [current_user]
+
+    # סינון כל רשומות הדאטה-בייס רק למשתמשים המורשים
+    filtered_logs = [l for l in all_logs if l['user'] in allowed_users] if all_logs else []
 
     st.subheader("Daily App Breakdown")
 
-    if all_logs:
-        available_dates = sorted(list(set([l['date'] for l in all_logs])), reverse=True)
+    if filtered_logs:
+        available_dates = sorted(list(set([l['date'] for l in filtered_logs])), reverse=True)
         selected_date = st.selectbox("Select Date:", options=available_dates)
         
-        logs_for_date = [l for l in all_logs if l['date'] == selected_date]
+        logs_for_date = [l for l in filtered_logs if l['date'] == selected_date]
 
         if logs_for_date:
             for log in logs_for_date:
@@ -226,7 +253,6 @@ with tab1:
                 tot_h = log.get('hours', 0)
                 tot_m = log.get('minutes', 0)
                 
-                # חישוב סך כל זמן המסך שהוזן (ה-100% של הבר)
                 total_screen_time = tot_h + (tot_m / 60)
                 
                 st.markdown(f"**{user}**")
@@ -234,32 +260,26 @@ with tab1:
 
                 app_data = log.get('app_data', {})
                 
-                # 1. בניית רשימת האפליקציות הרגילות שהוזנו
                 chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
-                
-                # חישוב סך הזמן שנאכל על ידי אפליקציות מוגדרות
                 total_apps_time = sum(duration for duration in app_data.values() if duration > 0)
                 
-                # 2. חישוב השארית עבור ה-Other
                 other_time = total_screen_time - total_apps_time
-                if other_time > 0.01:  # הגנה מפני שברים קטנים של פלואוט
+                if other_time > 0.01:
                     chart_data.append({"app": "Other", "duration": other_time, "user": ""})
                 
                 if chart_data:
                     df_apps = pd.DataFrame(chart_data)
                     
-                    # יצירת הגרף עם מיפוי צבעים ספציפי ל-Other כדי שיהיה אפור
                     fig_apps = px.bar(
                         df_apps, 
                         x="duration", 
                         y="user", 
                         color="app", 
                         orientation='h',
-                        color_discrete_map={'Other': '#5a5a62'} # צבע אפור כהה ואלגנטי ל-Other
+                        color_discrete_map={'Other': '#5a5a62'}
                     )
                     
                     fig_apps.update_traces(width=0.15, marker_line_width=0) 
-                    
                     fig_apps.update_layout(
                         height=80, 
                         margin=dict(l=0, r=0, t=10, b=0), 
@@ -279,9 +299,8 @@ with tab1:
                         )
                     )
                     
-                    st.plotly_chart(fig_apps, width= 'stretch', config={'displayModeBar': False})
+                    st.plotly_chart(fig_apps, width='stretch', config={'displayModeBar': False})
                     
-                    # שורת טקסט פירוט מתחת לבר (בלי להציג את Other בטקסט השורתי)
                     breakdown_strs = []
                     for _, row in df_apps.iterrows():
                         if row['app'] != 'Other':
@@ -295,55 +314,53 @@ with tab1:
         else:
             st.write("No app data logged for this date.")
         
-        # --- 6. הגרף הקווי (Squad Progress Chart) ---
+        # --- 6. הגרף הקווי (Squad Progress Chart) המסונן ---
         st.divider()
         st.subheader("Squad Progress Chart") 
         
-        df = pd.DataFrame(all_logs)
+        df = pd.DataFrame(filtered_logs)
         df['user'] = df['user'].str.strip()
         df['date'] = pd.to_datetime(df['date'])
         df['total_time'] = df['hours'] + (df['minutes'] / 60)
         df = df.sort_values(by=['user', 'date'])
         
         fig_line = px.line(df, x='date', y='total_time', color='user', 
-                        markers=True, title="Screen Time by User (Total Hours)")
-        st.plotly_chart(fig_line, width= 'stretch')
+                           markers=True, title="Screen Time by User (Total Hours)")
+        st.plotly_chart(fig_line, width='stretch')
 
     else:
         st.info("No logs available in the system yet.")
+        
+    # =========================================================
+    # --- 7. ניהול קבוצות (Squad Management) ---
+    # =========================================================
     st.divider()
     st.subheader("🤝 Squad Management")
 
     col_join, col_create = st.columns(2)
 
-    # --- הצטרפות לקבוצה קיימת ---
     with col_join:
         with st.form("join_squad_form", clear_on_submit=True):
             st.write("**Join an Existing Squad**")
             join_code = st.text_input("Enter 6-Digit Invite Code:")
             if st.form_submit_button("Join Squad"):
                 if join_code:
-                    # 1. מוודאים שהקבוצה קיימת
                     group_check = supabase.table("groups").select("id, name").eq("code", join_code.upper()).execute().data
                     if group_check:
                         new_group_id = group_check[0]['id']
                         group_name = group_check[0]['name']
                         
                         try:
-                            # 2. מוסיפים לטבלת חברי הקבוצה
                             supabase.table("group_members").insert({"group_id": new_group_id, "user": current_user}).execute()
-                            # 3. מאתחלים בלידרבורד הקבוצתי עם 0 נקודות
                             supabase.table("leaderboard").insert({"group_id": new_group_id, "user": current_user, "points": 0}).execute()
                             
                             st.success(f"Successfully joined '{group_name}'! 🎉")
                             st.rerun()
                         except Exception as e:
-                            # אם הוא כבר חבר, יקפוץ ה-Exception בגלל ה-Primary Key הכפול
                             st.error("You are already a member of this squad!")
                     else:
                         st.error("Invalid Code. Squad not found.")
 
-    # --- יצירת קבוצה חדשה ---
     with col_create:
         with st.form("create_squad_form", clear_on_submit=True):
             st.write("**Create a New Squad**")
@@ -352,7 +369,6 @@ with tab1:
                 if new_squad_name:
                     new_code = generate_group_code()
                     try:
-                        # 1. יוצרים את הקבוצה בטבלת הקבוצות
                         new_group = supabase.table("groups").insert({
                             "name": new_squad_name, 
                             "code": new_code, 
@@ -361,9 +377,7 @@ with tab1:
                         
                         if new_group:
                             new_group_id = new_group[0]['id']
-                            # 2. מוסיפים את היוצר כחבר קבוצה
                             supabase.table("group_members").insert({"group_id": new_group_id, "user": current_user}).execute()
-                            # 3. מאתחלים אותו בלידרבורד של הקבוצה החדשה
                             supabase.table("leaderboard").insert({"group_id": new_group_id, "user": current_user, "points": 0}).execute()
                             
                             st.success(f"Squad created! Your invite code is {new_code} 🚀")
