@@ -13,7 +13,7 @@ st.set_page_config(page_title="Screen Time Squad", layout="centered")
 
 # --- COOKIE MANAGER INITIALIZATION ---
 # אתחול מנהל העוגיות 
-@st.cache_resource(experimental_allow_widgets=True)
+@st.cache_resource
 def get_cookie_manager():
     return stx.CookieManager()
 
