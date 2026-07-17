@@ -195,7 +195,7 @@ with st.sidebar:
                     else:
                         st.error("Invalid Code.")
             
-        else: # Create Squad
+    else: # Create Squad
     # פותחים את קופסת הטופס
         with st.form("create_squad_form", clear_on_submit=True):
             new_name = st.text_input("New Squad Name:")
