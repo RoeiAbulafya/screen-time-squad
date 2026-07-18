@@ -566,35 +566,53 @@ with tab2:
             else:
                 active_challenges.append(ch)
                 
-        # --- חלק א': אתגרים פעילים ---
+  # --- חלק א': אתגרים פעילים ---
         if active_challenges:
             st.write("### 🎯 Active Challenges")
+            
+            # 1. שולפים את התאריך של היום כדי לבדוק אילו אתגרים כבר בוצעו היום
+            today_str = datetime.now().date().isoformat()
+            
+            # 2. מביאים מ-Supabase את כל האתגרים שהמשתמש הנוכחי ביצע *היום*
+            completions_response = supabase.table("challenge_completions").select("challenge_id").eq("user_name", current_user).eq("completion_date", today_str).execute()
+            
+            # יוצרים רשימה קלה של מזהי האתגרים (IDs) שבוצעו היום
+            completed_today_ids = [record["challenge_id"] for record in completions_response.data]
+
             with st.form("challenges_form"):
                 newly_completed = {}
                 for ch in active_challenges:
-                    completed_by = ch.get('completed_by') or []
-                    if current_user in completed_by:
-                        st.checkbox(f"✅ {ch['task']} ({ch['points']} pts) - Completed!", value=True, disabled=True, key=f"chk_{ch['id']}")
+                    # בדיקה חדשה: האם ה-ID של האתגר נמצא ברשימה של מה שבוצע היום?
+                    if ch['id'] in completed_today_ids:
+                        st.checkbox(f"✅ {ch['task']} ({ch['points']} pts) - Completed Today!", value=True, disabled=True, key=f"chk_{ch['id']}")
                     else:
                         newly_completed[ch['id']] = st.checkbox(f"⬜ {ch['task']} ({ch['points']} pts)", key=f"chk_{ch['id']}")
                         
                 submit_btn = st.form_submit_button("Update Score")
+                
                 if submit_btn:
                     points_to_add = 0
                     for ch_id, is_checked in newly_completed.items():
                         if is_checked:
                             ch_data = next(c for c in active_challenges if c['id'] == ch_id)
                             points_to_add += ch_data['points']
-                            updated_completed_by = (ch_data.get('completed_by') or []) + [current_user]
-                            supabase.table("challenges").update({"completed_by": updated_completed_by}).eq("id", ch_id).execute()
+                            
+                            # 3. במקום לעדכן את הטבלה הישנה, אנחנו רושמים את ההצלחה ביומן החדש שלנו!
+                            data_to_insert = {
+                                "user_name": current_user,
+                                "challenge_name": ch_id,
+                                "completion_date": today_str,
+                                "points": ch_data['points']
+                            }
+                            supabase.table("challenge_completions").insert(data_to_insert).execute()
                     
                     if points_to_add > 0:
-                        # עדכון ניקוד בלידרבורד תחת הקבוצה הספציפית בלבד
+                        # 4. עדכון ניקוד בלידרבורד תחת הקבוצה הספציפית בלבד (הקוד המקורי שלך שעובד מעולה)
                         user_record = supabase.table("leaderboard").select("points").eq("group_id", active_id).eq("user", current_user).execute().data
                         if user_record:
                             current_points = user_record[0].get("points", 0)
                             supabase.table("leaderboard").update({"points": current_points + points_to_add}).eq("group_id", active_id).eq("user", current_user).execute()
-                            st.success(f"Awesome! You earned {points_to_add} points! 🎉")
+                            st.success(f"Awesome! You earned {points_to_add} points today! 🎉")
                             st.rerun()
                         else:
                             st.error("Could not find your user in this squad's leaderboard.")
