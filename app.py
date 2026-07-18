@@ -574,10 +574,10 @@ with tab2:
             today_str = datetime.now().date().isoformat()
             
             # 2. מביאים מ-Supabase את כל האתגרים שהמשתמש הנוכחי ביצע *היום*
-            completions_response = supabase.table("challenge_completions").select("challenge_id").eq("user_name", current_user).eq("completion_date", today_str).execute()
+            completions_response = supabase.table("challenge_completions").select("challenge_name").eq("user_name", current_user).eq("completion_date", today_str).execute()
             
             # יוצרים רשימה קלה של מזהי האתגרים (IDs) שבוצעו היום
-            completed_today_ids = [record["challenge_id"] for record in completions_response.data]
+            completed_today_ids = [record["challenge_name"] for record in completions_response.data]
 
             with st.form("challenges_form"):
                 newly_completed = {}
