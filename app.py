@@ -586,7 +586,7 @@ with tab2:
                     if ch['id'] in completed_today_ids:
                         st.checkbox(f"✅ {ch['task']} ({ch['points']} pts) - Completed Today!", value=True, disabled=True, key=f"chk_{ch['id']}")
                     else:
-                        newly_completed[ch['id']] = st.checkbox(f"⬜ {ch['task']} ({ch['points']} pts)", key=f"chk_{ch['id']}")
+                        newly_completed[ch['id']] = st.checkbox(f"{ch['task']} ({ch['points']} pts)", key=f"chk_{ch['id']}")
                         
                 submit_btn = st.form_submit_button("Update Score")
                 
