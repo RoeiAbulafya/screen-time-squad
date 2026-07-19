@@ -6,6 +6,7 @@ from supabase import create_client
 import plotly.express as px
 import random
 import string
+
 def generate_group_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
@@ -14,17 +15,6 @@ st.set_page_config(page_title="Screen Time Squad", layout="centered")
 # --- COOKIE MANAGER INITIALIZATION ---
 cookie_manager = stx.CookieManager(key="cookie_manager")
 
-# מנסים למשוך את שם המשתמש מהעוגייה (אם קיים)
-saved_user = cookie_manager.get(cookie="saved_username")
-
-# --- INITIALIZATION ---
-# אם יש עוגייה, נכניס את המשתמש ישר. אם לא, נאתחל כ-None
-if "user_name" not in st.session_state: 
-    st.session_state["user_name"] = saved_user 
-
-if "tracked_apps" not in st.session_state:
-    st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
-
 # --- SUPABASE CONNECTION ---
 @st.cache_resource
 def init_supabase():
@@ -32,40 +22,145 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- LOGIN ---
-if not st.session_state["user_name"]:
+# --- SESSION RESTORE FROM COOKIE ---
+# מנסים לשחזר session קיים מהעוגייה (אם המשתמש כבר התחבר בעבר)
+if "user_name" not in st.session_state:
+    saved_access_token = cookie_manager.get(cookie="sb_access_token")
+    saved_refresh_token = cookie_manager.get(cookie="sb_refresh_token")
+    saved_username = cookie_manager.get(cookie="saved_username")
+
+    if saved_access_token and saved_refresh_token and saved_username:
+        try:
+            # מנסים לרענן את ה-session עם ה-tokens השמורים
+            res = supabase.auth.set_session(saved_access_token, saved_refresh_token)
+            if res and res.user:
+                st.session_state["user_name"] = saved_username
+                st.session_state["auth_user"] = res.user
+        except Exception:
+            # אם ה-tokens פגו - נאפס ונבקש כניסה מחדש
+            st.session_state["user_name"] = None
+    else:
+        st.session_state["user_name"] = None
+
+if "tracked_apps" not in st.session_state:
+    st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
+
+# --- LOGIN / SIGNUP PAGE ---
+if not st.session_state.get("user_name"):
+
     st.title("👋 Welcome to Screen Time Squad!")
-    
-    with st.container():
-        st.markdown("""
-        ### Ready to take back your time? 
-        Join the squad to track your screen time, compete in healthy challenges, 
-        and lower your digital footprint together with friends.
-        """)
-        
-        col1, col2 = st.columns([0.6, 0.4])
-        with col1:
-            st.markdown("""
-            *   📊 **Track:** Log your daily usage.
-            *   🏆 **Compete:** Climb the leaderboard.
-            *   🤝 **Connect:** Reflect with your squad.
-            """)
-            
-            name = st.text_input("Enter your name to join:")
-            if st.button("Get Started 🚀"):
-                if name.strip():
-                    clean_name = name.strip().capitalize()
-                    
-                    # 1. שומרים ב-Session State לאפליקציה הנוכחית
-                    st.session_state["user_name"] = clean_name
-                    
-                    # 2. שומרים בעוגייה כדי שהדפדפן יזכור את המשתמש ל-30 יום!
-                    expire_date = datetime.now() + timedelta(days=30)
-                    cookie_manager.set("saved_username", clean_name, expires_at=expire_date)
-                    
-                    st.rerun()
-                    
-    st.stop()    
+    st.markdown("Track your screen time, compete with friends, and build healthier habits together.")
+    st.divider()
+
+    tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
+
+    # ---- כניסה ----
+    with tab_login:
+        with st.form("login_form"):
+            login_email = st.text_input("Email")
+            login_password = st.text_input("Password", type="password")
+            submitted_login = st.form_submit_button("Sign In 🚀", use_container_width=True)
+
+        if submitted_login:
+            if not login_email or not login_password:
+                st.error("Please fill in all fields.")
+            else:
+                try:
+                    res = supabase.auth.sign_in_with_password({
+                        "email": login_email.strip(),
+                        "password": login_password
+                    })
+                    if res and res.user:
+                        # שולפים את שם המשתמש מטבלת profiles
+                        profile = supabase.table("profiles").select("username").eq("id", res.user.id).execute().data
+                        username = profile[0]["username"] if profile else login_email.split("@")[0]
+
+                        # שמירה ב-session state
+                        st.session_state["user_name"] = username
+                        st.session_state["auth_user"] = res.user
+
+                        # שמירה בעוגיות ל-30 יום
+                        expire_date = datetime.now() + timedelta(days=30)
+                        cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date)
+                        cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date)
+                        cookie_manager.set("saved_username", username, expires_at=expire_date)
+
+                        st.rerun()
+                except Exception as e:
+                    err = str(e)
+                    if "Invalid login" in err or "invalid_credentials" in err:
+                        st.error("Incorrect email or password.")
+                    else:
+                        st.error(f"Sign in failed: {err}")
+
+    # ---- הרשמה ----
+    with tab_signup:
+        with st.form("signup_form"):
+            signup_username = st.text_input("Display Name (shown to your squad)")
+            signup_email = st.text_input("Email")
+            signup_password = st.text_input("Password (min. 6 characters)", type="password")
+            signup_confirm = st.text_input("Confirm Password", type="password")
+            submitted_signup = st.form_submit_button("Create Account ✨", use_container_width=True)
+
+        if submitted_signup:
+            if not signup_username or not signup_email or not signup_password:
+                st.error("Please fill in all fields.")
+            elif signup_password != signup_confirm:
+                st.error("Passwords don't match.")
+            elif len(signup_password) < 6:
+                st.error("Password must be at least 6 characters.")
+            else:
+                try:
+                    # בדיקה שהשם לא תפוס
+                    existing = supabase.table("profiles").select("username").eq("username", signup_username.strip()).execute().data
+                    if existing:
+                        st.error("That display name is already taken. Choose another.")
+                    else:
+                        res = supabase.auth.sign_up({
+                            "email": signup_email.strip(),
+                            "password": signup_password
+                        })
+                        if res and res.user:
+                            # יצירת פרופיל עם שם תצוגה
+                            supabase.table("profiles").insert({
+                                "id": res.user.id,
+                                "username": signup_username.strip()
+                            }).execute()
+
+                            # כניסה אוטומטית אחרי הרשמה
+                            st.session_state["user_name"] = signup_username.strip()
+                            st.session_state["auth_user"] = res.user
+
+                            expire_date = datetime.now() + timedelta(days=30)
+                            cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date)
+                            cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date)
+                            cookie_manager.set("saved_username", signup_username.strip(), expires_at=expire_date)
+
+                            st.success(f"Welcome to the squad, {signup_username.strip()}! 🎉")
+                            st.rerun()
+                except Exception as e:
+                    err = str(e)
+                    if "already registered" in err or "already been registered" in err:
+                        st.error("An account with this email already exists. Try signing in.")
+                    else:
+                        st.error(f"Sign up failed: {err}")
+
+    st.stop()
+
+# --- LOGOUT BUTTON (בסיידבר, אחרי הכניסה) ---
+def logout():
+    try:
+        supabase.auth.sign_out()
+    except Exception:
+        pass
+    # מחיקת עוגיות
+    cookie_manager.delete("sb_access_token")
+    cookie_manager.delete("sb_refresh_token")
+    cookie_manager.delete("saved_username")
+    # איפוס session state
+    for key in ["user_name", "auth_user", "active_group_id", "tracked_apps"]:
+        st.session_state.pop(key, None)
+    st.rerun()
 
 # --- TOP BAR ---
 active_id = st.session_state.get("active_group_id") or st.session_state.get("selected_group_id")
@@ -124,6 +219,9 @@ if user_groups_data:
 with st.sidebar:
     st.subheader("👥 My Squads")
     current_user = st.session_state["user_name"]
+    
+    if st.button("🚪 Sign Out", use_container_width=True):
+        logout()
         
     # הנחה: group_options כבר מוגדר בקוד שלך לפני ה-sidebar
     if group_options:
