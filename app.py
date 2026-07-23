@@ -989,7 +989,9 @@ with tab3:
 
 # --- TAB 4: INSIGHTS ---
 with tab4:
-    st.header("✨ Personal Insights & Goals")
+    st.subheader("PERSONAL INSIGHTS & GOALS")
+    st.caption("Analyze your screen time habits, track performance, and set daily target goals")
+    st.divider()
     
     current_user = st.session_state["user_name"]
     
@@ -997,7 +999,7 @@ with tab4:
     user_logs = supabase.table("logs").select("*").eq("user", current_user).execute().data
     
     if not user_logs:
-        st.info("You don't have any logged data yet. Start logging your screen time in the Home tab to see your insights!")
+        st.info("No logged data found. Start logging your daily screen time to unlock personal insights.")
     else:
         # המרה ל-DataFrame וסידור לפי תאריך (מהחדש לישן)
         df = pd.DataFrame(user_logs)
@@ -1006,90 +1008,89 @@ with tab4:
         df = df.sort_values('date', ascending=False)
         
         # --- 2. חישובים סטטיסטיים ---
-        # לוקחים את 7 הימים האחרונים שיש להם לוג (או פחות אם אין 7)
         last_7_logs = df.head(7)
         weekly_avg = last_7_logs['total_hours'].mean()
         
-        # לוקחים את הלוג האחרון (אתמול/היום)
         latest_log = df.iloc[0]
         latest_time = latest_log['total_hours']
-        latest_date_str = latest_log['date'].strftime('%b %d') # למשל: Jul 17
+        latest_date_str = latest_log['date'].strftime('%b %d')
         
+        # =========================================================
         # --- 3. אזור הגדרת יעד אישי ---
-        st.subheader("🎯 Set Your Daily Goal")
-        
-        # יעד מומלץ: 10% פחות מהממוצע השבועי (מעוגל לחצי שעה קרובה)
+        # =========================================================
         recommended_goal = max(0.5, round((weekly_avg * 0.9) * 2) / 2)
         
-        # שומרים ב-Session State כדי שהיעד יישמר בזמן הניווט באפליקציה
         if "daily_goal" not in st.session_state:
             st.session_state["daily_goal"] = recommended_goal
             
-        col_goal1, col_goal2 = st.columns([1, 1])
-        with col_goal1:
-            user_goal = st.number_input(
-                "My Screen Time Goal (Hours):", 
-                min_value=0.5, max_value=24.0, step=0.5, 
-                value=float(st.session_state["daily_goal"])
-            )
-            st.session_state["daily_goal"] = user_goal
-        with col_goal2:
-            st.markdown(f"""
-            <div style='padding: 30px 0px 0px 10px; color: #a0a0a0;'>
-                💡 <b>Tip:</b> Based on your 7-day average, try aiming for <b>{recommended_goal}h</b>!
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.caption("DAILY TARGET GOAL")
+            col_goal1, col_goal2 = st.columns([1, 1])
             
-        st.divider()
-        
+            with col_goal1:
+                user_goal = st.number_input(
+                    "My Screen Time Goal (Hours)", 
+                    min_value=0.5, max_value=24.0, step=0.5, 
+                    value=float(st.session_state["daily_goal"])
+                )
+                st.session_state["daily_goal"] = user_goal
+                
+            with col_goal2:
+                st.markdown(f"""
+                <div style='padding-top: 25px; color: #8A92A6; font-size: 13px; line-height: 1.4;'>
+                    <b>RECOMMENDED TARGET:</b><br/>
+                    Based on your 7-day average ({weekly_avg:.1f}h), aiming for <b>{recommended_goal}h</b> is optimal for gradual reduction.
+                </div>
+                """, unsafe_allow_html=True)
+                
+        st.write("") # רווח
+
+        # =========================================================
         # --- 4. אזור תצוגת ביצועים (Metrics) ---
-        st.subheader("📊 Your Performance")
+        # =========================================================
+        st.subheader("PERFORMANCE SUMMARY")
+        st.caption("Comparison between your daily targets and actual screen time")
         
-        m1, m2, m3 = st.columns(3)
-        
-        # פונקציית עזר להמרת שעות עשרוניות לתצוגה יפה (למשל 4h 30m)
         def format_hm(hours_float):
             h = int(hours_float)
             m = int(round((hours_float - h) * 60))
             return f"{h}h {m}m"
         
-        # חישוב הדלתא לעומת היעד
         delta_val = latest_time - user_goal
         
-        # Streamlit Metric 1: הלוג האחרון לעומת היעד
-        # delta_color="inverse" גורם לכך שמספר חיובי (חרג מהיעד) יהיה אדום, ושלילי (עמד ביעד) יהיה ירוק!
-        m1.metric(
-            label=f"Latest Log ({latest_date_str})", 
-            value=format_hm(latest_time),
-            delta=f"{round(delta_val, 1)}h (Goal difference)",
-            delta_color="inverse" 
-        )
-        
-        # Streamlit Metric 2: הממוצע השבועי
-        m2.metric(
-            label="7-Day Average", 
-            value=format_hm(weekly_avg)
-        )
-        
-        # Streamlit Metric 3: היעד שהוגדר
-        m3.metric(
-            label="Daily Goal", 
-            value=f"{user_goal}h"
-        )
-        
-        # --- 5. פידבק חכם ודינמי ---
-        st.write("") # קצת רווח נשימה
+        with st.container(border=True):
+            m1, m2, m3 = st.columns(3)
+            
+            m1.metric(
+                label=f"Latest Log ({latest_date_str})", 
+                value=format_hm(latest_time),
+                delta=f"{round(delta_val, 1)}h vs Goal",
+                delta_color="inverse" 
+            )
+            
+            m2.metric(
+                label="7-Day Average", 
+                value=format_hm(weekly_avg)
+            )
+            
+            m3.metric(
+                label="Daily Goal Target", 
+                value=f"{user_goal}h"
+            )
+            
+        st.write("") # רווח
+
+        st.subheader("HABIT ANALYSIS")
         
         if latest_time <= user_goal:
-            st.success("🎉 Awesome job! Your last log was under your daily goal. Keep up the great work!")
+            st.success("Target Achieved: Your latest screen time remained within your daily goal.")
         else:
-            st.warning(f"You were {round(delta_val, 1)} hours over your goal. Tomorrow is a new opportunity! 💪")
+            st.warning(f"Goal Exceeded: Your screen time was {round(delta_val, 1)} hours over your daily target.")
             
-        # השוואה לממוצע לזיהוי מגמה
         if latest_time < weekly_avg:
-            st.info("📉 Good trend: Your latest screen time is lower than your 7-day average. You are improving!")
+            st.info("Positive Trend: Your latest logged screen time is lower than your 7-day average.")
         elif latest_time > weekly_avg:
-            st.info("📈 Watch out: Your latest screen time was higher than your recent average. Try to break the streak!")
+            st.info("Attention: Your latest screen time exceeded your recent average.")
         
 # --- TAB 5: PERSONAL GROWTH  ---
 with tab5:
