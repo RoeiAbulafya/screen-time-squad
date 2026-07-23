@@ -365,10 +365,13 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # --- TAB 1: DASHBOARD ---
 with tab1:
-    st.header("Log Your Time")
-    log_date = st.date_input("Date")
+    st.subheader("LOG YOUR TIME")
+    st.caption("Track your daily digital habits and monitor your screen time")
+    st.divider()
     
-    # משתנים כלליים לשמוש בהמשך
+    log_date = st.date_input("Select Date")
+    
+    # משתנים כלליים לשימוש בהמשך
     active_id = st.session_state.get("active_group_id")
     current_user = st.session_state["user_name"]
     
@@ -390,45 +393,58 @@ with tab1:
         default_minutes = 0
         existing_apps = {}
 
-    # 1. קלט זמן מסך כללי
-    col_h, col_m = st.columns(2)
-    with col_h:
-        hours_input = st.number_input("Total Hours:", min_value=0, max_value=24, step=1, value=default_hours, key=f"total_h_{log_date}")
-    with col_m:
-        minutes_input = st.number_input("Total Minutes:", min_value=0, max_value=59, step=1, value=default_minutes, key=f"total_m_{log_date}")
-    
-    st.divider()
-    st.subheader("App Breakdown")
-    
-    if "TikTok" in st.session_state["tracked_apps"]:
-        st.session_state["tracked_apps"].remove("TikTok")
-
-    # 2. לולאת קלט לאפליקציות
-    app_logs = {}
-    for app in st.session_state["tracked_apps"]:
-        st.markdown(f"**{app}**")
+    # =========================================================
+    # --- 1. אזור הזנת הנתונים (עטוף בכרטיסייה אלגנטית) ---
+    # =========================================================
+    with st.container(border=True):
+        st.markdown("**TOTAL SCREEN TIME**")
+        col_h, col_m = st.columns(2)
+        with col_h:
+            hours_input = st.number_input("Total Hours", min_value=0, max_value=24, step=1, value=default_hours, key=f"total_h_{log_date}")
+        with col_m:
+            minutes_input = st.number_input("Total Minutes", min_value=0, max_value=59, step=1, value=default_minutes, key=f"total_m_{log_date}")
         
-        app_total_hours = existing_apps.get(app, 0.0)
-        app_default_h = int(app_total_hours)
-        app_default_m = int(round((app_total_hours - app_default_h) * 60))
+        st.write("") # רווח קטן ומשמיש
+        st.markdown("**APP BREAKDOWN**")
         
-        c1, c2 = st.columns(2)
-        with c1:
-            h = st.number_input(f"{app} (Hours):", min_value=0, max_value=24, step=1, value=app_default_h, key=f"{app}_h_{log_date}")
-        with c2:
-            m = st.number_input(f"{app} (Minutes):", min_value=0, max_value=59, step=1, value=app_default_m, key=f"{app}_m_{log_date}")
-        app_logs[app] = h + (m / 60)
+        if "TikTok" in st.session_state["tracked_apps"]:
+            st.session_state["tracked_apps"].remove("TikTok")
 
-    # 3. הוספת אפליקציה חדשה ליום הנוכחי
-    st.subheader("➕ Add New App")
-    new_app = st.text_input("New App Name:")
-    if st.button("Add App"):
-        if new_app and new_app not in st.session_state["tracked_apps"]:
-            st.session_state["tracked_apps"].append(new_app)
-            st.rerun()
+        # 2. לולאת קלט לאפליקציות - מסודרת ברשימה נקייה לרוחב
+        app_logs = {}
+        for app in st.session_state["tracked_apps"]:
+            app_total_hours = existing_apps.get(app, 0.0)
+            app_default_h = int(app_total_hours)
+            app_default_m = int(round((app_total_hours - app_default_h) * 60))
+            
+            # פריסה של 3 עמודות: שם האפליקציה, שעות, דקות
+            col_name, col_app_h, col_app_m = st.columns([2, 1, 1])
+            with col_name:
+                st.markdown(f"<div style='padding-top: 35px; font-weight: 500;'>{app}</div>", unsafe_allow_html=True)
+            with col_app_h:
+                h = st.number_input("Hours", min_value=0, max_value=24, step=1, value=app_default_h, key=f"{app}_h_{log_date}")
+            with col_app_m:
+                m = st.number_input("Minutes", min_value=0, max_value=59, step=1, value=app_default_m, key=f"{app}_m_{log_date}")
+            
+            app_logs[app] = h + (m / 60)
 
-    # 4. שמירת נתונים
-    if st.button("Save Daily Log"):
+        st.divider()
+
+        # 3. הוספת אפליקציה חדשה ליום הנוכחי (בשורה אחת מודרנית)
+        st.caption("ADD TRACKED APP")
+        col_input, col_btn = st.columns([3, 1])
+        with col_input:
+            new_app = st.text_input("New App Name", label_visibility="collapsed", placeholder="Enter app name (e.g. Instagram, YouTube)...")
+        with col_btn:
+            if st.button("Add App", use_container_width=True):
+                if new_app and new_app not in st.session_state["tracked_apps"]:
+                    st.session_state["tracked_apps"].append(new_app)
+                    st.rerun()
+
+    st.write("") # רווח
+
+    # 4. שמירת נתונים - כפתור ראשי בולט ומעוצב
+    if st.button("Save Daily Log", type="primary", use_container_width=True):
         existing_log = supabase.table("logs").select("id").eq("user", current_user).eq("date", str(log_date)).execute().data
         if existing_log:
             supabase.table("logs").delete().eq("id", existing_log[0]['id']).execute()
@@ -441,7 +457,7 @@ with tab1:
             "app_data": app_logs
         }
         supabase.table("logs").insert(data_to_insert).execute()
-        st.success("Log saved!")
+        st.success("Log saved successfully!")
         st.rerun()
 
     st.divider()
@@ -453,21 +469,19 @@ with tab1:
 
     # לוגיקת סינון: קביעה אילו משתמשים מותר לראות בגרפים
     if not active_id:
-        # משתמש ללא קבוצה רואה רק את עצמו
         allowed_users = [current_user]
     else:
-        # משתמש בקבוצה רואה את כל חברי הקבוצה שלו בלבד
         members_data = supabase.table("group_members").select("user").eq("group_id", active_id).execute().data
         allowed_users = [m['user'] for m in members_data] if members_data else [current_user]
 
-    # סינון כל רשומות הדאטה-בייס רק למשתמשים המורשים
     filtered_logs = [l for l in all_logs if l['user'] in allowed_users] if all_logs else []
 
-    st.subheader("Daily App Breakdown")
+    st.subheader("DAILY BREAKDOWN")
+    st.caption("Compare app usage distribution among your squad")
 
     if filtered_logs:
         available_dates = sorted(list(set([l['date'] for l in filtered_logs])), reverse=True)
-        selected_date = st.selectbox("Select Date:", options=available_dates)
+        selected_date = st.selectbox("Select Date for Analysis", options=available_dates)
         
         logs_for_date = [l for l in filtered_logs if l['date'] == selected_date]
 
@@ -476,71 +490,73 @@ with tab1:
                 user = log['user']
                 tot_h = log.get('hours', 0)
                 tot_m = log.get('minutes', 0)
-                
                 total_screen_time = tot_h + (tot_m / 60)
                 
-                st.markdown(f"**{user}**")
-                st.markdown(f"<h1 style='margin-top: -15px; margin-bottom: 0px;'>{tot_h}h {tot_m}m</h1>", unsafe_allow_html=True)
-
-                app_data = log.get('app_data', {})
-                
-                chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
-                total_apps_time = sum(duration for duration in app_data.values() if duration > 0)
-                
-                other_time = total_screen_time - total_apps_time
-                if other_time > 0.01:
-                    chart_data.append({"app": "Other", "duration": other_time, "user": ""})
-                
-                if chart_data:
-                    df_apps = pd.DataFrame(chart_data)
+                # עטיפת הנתון של כל משתמש בקופסה נפרדת למראה נקי
+                with st.container(border=True):
+                    col_u1, col_u2 = st.columns([1, 4])
+                    with col_u1:
+                        st.caption(f"USER: {user.upper()}")
+                        st.metric(label="Total Time", value=f"{tot_h}h {tot_m}m")
                     
-                    fig_apps = px.bar(
-                        df_apps, 
-                        x="duration", 
-                        y="user", 
-                        color="app", 
-                        orientation='h',
-                        color_discrete_map={'Other': '#5a5a62'}
-                    )
-                    
-                    fig_apps.update_traces(width=0.15, marker_line_width=0) 
-                    fig_apps.update_layout(
-                        height=80, 
-                        margin=dict(l=0, r=0, t=10, b=0), 
-                        paper_bgcolor="rgba(0,0,0,0)", 
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
-                        yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
-                        showlegend=True,
-                        legend=dict(
-                            orientation="h", 
-                            yanchor="top",
-                            y=-0.2,
-                            xanchor="left",
-                            x=0,
-                            title="",
-                            font=dict(size=11)
-                        )
-                    )
-                    
-                    st.plotly_chart(fig_apps, width='stretch', config={'displayModeBar': False})
-                    
-                    breakdown_strs = []
-                    for _, row in df_apps.iterrows():
-                        if row['app'] != 'Other':
-                            mins = int(row['duration'] * 60)
-                            breakdown_strs.append(f"{row['app']} {mins}m")
-                    
-                    if breakdown_strs:
-                        st.markdown(f"<div style='font-size: 12px; color: #a0a0a0; margin-top: -15px;'>{' · '.join(breakdown_strs)}</div>", unsafe_allow_html=True)
-                    
-                st.divider() 
+                    with col_u2:
+                        app_data = log.get('app_data', {})
+                        chart_data = [{"app": app, "duration": duration, "user": ""} for app, duration in app_data.items() if duration > 0]
+                        total_apps_time = sum(duration for duration in app_data.values() if duration > 0)
+                        
+                        other_time = total_screen_time - total_apps_time
+                        if other_time > 0.01:
+                            chart_data.append({"app": "Other", "duration": other_time, "user": ""})
+                        
+                        if chart_data:
+                            df_apps = pd.DataFrame(chart_data)
+                            
+                            fig_apps = px.bar(
+                                df_apps, 
+                                x="duration", 
+                                y="user", 
+                                color="app", 
+                                orientation='h',
+                                color_discrete_map={'Other': '#3A3F50'} # אפור-כחלחל שמתאים לרקע כהה
+                            )
+                            
+                            fig_apps.update_traces(width=0.3, marker_line_width=0) 
+                            fig_apps.update_layout(
+                                height=80, 
+                                margin=dict(l=0, r=0, t=0, b=0), 
+                                paper_bgcolor="rgba(0,0,0,0)", 
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                xaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
+                                yaxis=dict(showgrid=False, showticklabels=False, zeroline=False, title=""), 
+                                showlegend=True,
+                                legend=dict(
+                                    orientation="h", 
+                                    yanchor="top",
+                                    y=-0.5,
+                                    xanchor="left",
+                                    x=0,
+                                    title="",
+                                    font=dict(size=11, color="#EAEEF6") # צבע פונט מותאם למצב לילה
+                                )
+                            )
+                            
+                            st.plotly_chart(fig_apps, use_container_width=True, config={'displayModeBar': False})
+                            
+                            breakdown_strs = []
+                            for _, row in df_apps.iterrows():
+                                if row['app'] != 'Other':
+                                    mins = int(row['duration'] * 60)
+                                    breakdown_strs.append(f"{row['app']} {mins}m")
+                            
+                            if breakdown_strs:
+                                st.markdown(f"<div style='font-size: 12px; color: #8A92A6; margin-top: -10px;'>{' · '.join(breakdown_strs)}</div>", unsafe_allow_html=True)
         else:
-            st.write("No app data logged for this date.")
+            st.info("No app data logged for this date.")
         
-        # --- 6. הגרף הקווי (Squad Progress Chart) המסונן ---
-        st.divider()
-        st.subheader("Squad Progress Chart") 
+        # --- 6. הגרף הקווי (Squad Progress Chart) המשודרג ---
+        st.write("")
+        st.subheader("SQUAD PROGRESS") 
+        st.caption("Screen time trends over time")
         
         df = pd.DataFrame(filtered_logs)
         df['user'] = df['user'].str.strip()
@@ -548,17 +564,35 @@ with tab1:
         df['total_time'] = df['hours'] + (df['minutes'] / 60)
         df = df.sort_values(by=['user', 'date'])
         
-        fig_line = px.line(df, x='date', y='total_time', color='user', 
-                           markers=True, title="Screen Time by User (Total Hours)")
-        st.plotly_chart(fig_line, width='stretch')
+        fig_line = px.line(
+            df, 
+            x='date', 
+            y='total_time', 
+            color='user', 
+            markers=True,
+            template="plotly_dark" # עיצוב כהה ואלגנטי לגרף הקווי
+        )
+        
+        # התאמה אישית לרקע הגרף שייטמע ברקע האפליקציה
+        fig_line.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(22, 25, 34, 0.5)", # רקע שקוף למחצה שתואם לכרטיסיות שלנו
+            margin=dict(l=20, r=20, t=20, b=20),
+            xaxis_title="Date",
+            yaxis_title="Total Hours",
+            legend_title="Squad Members"
+        )
+        fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
+        fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
+        
+        st.plotly_chart(fig_line, use_container_width=True)
 
     else:
         st.info("No logs available in the system yet.")
         
- #reset group challenge points (sunday or a button)       
+
 def reset_squad_challenges(group_id):
     if group_id:
-        # מאפסים את הניקוד ל-0 רק עבור חברי הקבוצה הספציפית הזו
         supabase.table("leaderboard").update({"points": 0}).eq("group_id", group_id).execute()
 
 # --- TAB 2: SQUAD CHALLENGES ---
