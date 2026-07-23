@@ -6,6 +6,7 @@ from supabase import create_client
 import plotly.express as px
 import random
 import string
+import time
 #dark theme style
 def apply_sleek_theme():
     # הגדרה לתצוגה רחבה ומרווחת לניצול נכון של המסך
@@ -282,7 +283,7 @@ def calculate_streak(user_name, all_logs):
     return streak
 
 user_streak = calculate_streak(current_user, supabase.table("logs").select("*").execute().data)
-st.markdown(f"### Connected as: **{current_user}**  {user_streak} days in a row!")
+st.markdown(f"{user_streak} days in a row! Keep it up!")
     # משיכת הקבוצות שהמשתמש חבר בהן מתוך טבלת הקשר, כולל פרטי הקבוצה
 user_groups_response = supabase.table("group_members").select("group_id, groups(id, name, code)").eq("user", current_user).execute()
 user_groups_data = user_groups_response.data
@@ -419,7 +420,7 @@ with tab1:
         default_minutes = int(current_log.get('minutes', 0))
         existing_apps = current_log.get('app_data', {})
         
-        # --- הפיצ'ר החדש: הוספת אפליקציות מהעבר לרשימה הנוכחית ---
+        # ---  הוספת אפליקציות מהעבר לרשימה הנוכחית ---
         for app_name in existing_apps.keys():
             if app_name not in st.session_state["tracked_apps"]:
                 st.session_state["tracked_apps"].append(app_name)
@@ -428,9 +429,7 @@ with tab1:
         default_minutes = 0
         existing_apps = {}
 
-    # =========================================================
-    # --- 1. אזור הזנת הנתונים (עטוף בכרטיסייה אלגנטית) ---
-    # =========================================================
+
     with st.container(border=True):
         st.markdown("**TOTAL SCREEN TIME**")
         col_h, col_m = st.columns(2)
@@ -439,7 +438,7 @@ with tab1:
         with col_m:
             minutes_input = st.number_input("Total Minutes", min_value=0, max_value=59, step=1, value=default_minutes, key=f"total_m_{log_date}")
         
-        st.write("") # רווח קטן ומשמיש
+        st.write("") 
         st.markdown("**APP BREAKDOWN**")
         
         if "TikTok" in st.session_state["tracked_apps"]:
@@ -476,7 +475,7 @@ with tab1:
                     st.session_state["tracked_apps"].append(new_app)
                     st.rerun()
 
-    st.write("") # רווח
+    st.write("") 
 
     # 4. שמירת נתונים - כפתור ראשי בולט ומעוצב
     if st.button("Save Daily Log", type="primary", use_container_width=True):
@@ -496,10 +495,8 @@ with tab1:
         st.rerun()
 
     st.divider()
-    
-    # =========================================================
+
     # --- 5. הצגת הגרפים (מוגנים ומסוננים לפי לוגיקת קבוצות) ---
-    # =========================================================
     all_logs = supabase.table("logs").select("*").execute().data
 
     # לוגיקת סינון: קביעה אילו משתמשים מותר לראות בגרפים
@@ -589,41 +586,57 @@ with tab1:
             st.info("No app data logged for this date.")
         
         # --- 6. הגרף הקווי (Squad Progress Chart) המשודרג ---
-        st.write("")
-        st.subheader("SQUAD PROGRESS") 
-        st.caption("Screen time trends over time")
-        
-        df = pd.DataFrame(filtered_logs)
-        df['user'] = df['user'].str.strip()
-        df['date'] = pd.to_datetime(df['date'])
-        df['total_time'] = df['hours'] + (df['minutes'] / 60)
-        df = df.sort_values(by=['user', 'date'])
-        
-        fig_line = px.line(
-            df, 
-            x='date', 
-            y='total_time', 
-            color='user', 
-            markers=True,
-            template="plotly_dark" # עיצוב כהה ואלגנטי לגרף הקווי
-        )
-        
-        # התאמה אישית לרקע הגרף שייטמע ברקע האפליקציה
-        fig_line.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(22, 25, 34, 0.5)", # רקע שקוף למחצה שתואם לכרטיסיות שלנו
-            margin=dict(l=20, r=20, t=20, b=20),
-            xaxis_title="Date",
-            yaxis_title="Total Hours",
-            legend_title="Squad Members"
-        )
-        fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
-        fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
-        
-        st.plotly_chart(fig_line, use_container_width=True)
+st.write("")
+st.subheader("SQUAD PROGRESS") 
+st.caption("Screen time trends over time")
 
-    else:
-        st.info("No logs available in the system yet.")
+# 1. הכנת הנתונים הראשונית
+df = pd.DataFrame(filtered_logs)
+df['user'] = df['user'].str.strip()
+df['date'] = pd.to_datetime(df['date'])
+df['total_time'] = df['hours'] + (df['minutes'] / 60)
+df = df.sort_values(by=['user', 'date'])
+
+# 2. כפתורי בחירת טווח + סינון ה-DataFrame
+time_frame = st.radio(
+    "Select range:",
+    options=["Last 7 Days", "Last 14 Days", "All Time"],
+    horizontal=True,
+    key="squad_progress_range"
+)
+
+max_date = df['date'].max()
+
+if time_frame == "Last 7 Days":
+    df_chart = df[df['date'] >= (max_date - pd.Timedelta(days=6))]
+elif time_frame == "Last 14 Days":
+    df_chart = df[df['date'] >= (max_date - pd.Timedelta(days=13))]
+else:
+    df_chart = df
+
+# 3. יצירת הגרף (שימוש ב-df_chart המסונן)
+fig_line = px.line(
+    df_chart, 
+    x='date', 
+    y='total_time', 
+    color='user', 
+    markers=True,
+    template="plotly_dark"
+)
+
+# התאמה אישית לרקע הגרף שייטמע ברקע האפליקציה
+fig_line.update_layout(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(22, 25, 34, 0.5)",
+    margin=dict(l=20, r=20, t=20, b=20),
+    xaxis_title="Date",
+    yaxis_title="Total Hours",
+    legend_title="Squad Members"
+)
+fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
+fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
+
+st.plotly_chart(fig_line, use_container_width=True)
         
 
 def reset_squad_challenges(group_id):
