@@ -1,0 +1,7 @@
+[theme]
+base = "dark"
+primaryColor = "#00C896" # ירוק-מנטה אלגנטי ויוקרתי שמשדר חדשנות
+backgroundColor = "#0D0F14" # שחור-פחם עמוק ורך לעין (לא שחור 100%)
+secondaryBackgroundColor = "#161922" # גוון כהה מעט בהיר יותר עבור כרטיסיות וסרגל הצד
+textColor = "#EAEEF6" # לבן-אפרפר נקי למניעת עייפות עין
+font = "sans serif"

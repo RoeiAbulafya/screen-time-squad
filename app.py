@@ -6,7 +6,60 @@ from supabase import create_client
 import plotly.express as px
 import random
 import string
+#dark theme style
+def apply_sleek_theme():
+    # הגדרה לתצוגה רחבה ומרווחת לניצול נכון של המסך
+    st.set_page_config(page_title="App Name", layout="wide", initial_sidebar_state="collapsed")
+    
+    custom_css = """
+    <style>
+    /* העלמת התפריט העליון, כותרת ופוטר של Streamlit */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* ריווח עדין ונקי בראש העמוד */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* עיצוב כפתורים מינימליסטי וחלק */
+    .stButton > button {
+        width: 100%;
+        border-radius: 6px;
+        border: 1px solid #2D3243;
+        background-color: #161922;
+        color: #EAEEF6;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover {
+        border-color: #00C896;
+        color: #00C896;
+        box-shadow: 0 0 8px rgba(0, 200, 150, 0.2);
+    }
+    
+    /* עיצוב כרטיסיות (Containers) עם מסגרת דקה ואלגנטית במקום אפור כבד */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 8px;
+        border: 1px solid #222735 !important;
+        background-color: #12151D;
+    }
+    
+    /* עיצוב נקי של שדות קלט (Input Fields) */
+    .stTextInput input, .stPassword input {
+        border-radius: 6px;
+        border: 1px solid #2A2F3E;
+        background-color: #0D0F14;
+        color: #EAEEF6;
+    }
+    </style>
+    """
+    st.markdown(custom_css, unsafe_allow_html=True)
 
+# הפעלת העיצוב בתחילת ריצת האפליקציה
+apply_sleek_theme()
 def generate_group_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
