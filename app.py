@@ -872,82 +872,120 @@ with tab3:
     active_id = st.session_state.get("active_group_id")
     
     if not active_id:
-        st.warning("⚠️ You need to select or join a squad first! Go to the Dashboard tab.")
+        st.warning("You need to select or join a squad first. Please navigate to the Dashboard tab.")
     else:
-        st.header("Squad Feed")
+        st.subheader("SQUAD FEED")
+        st.caption("Share updates, thoughts, and stay connected with your squad members")
+        st.divider()
         
-        # --- יצירת פוסט חדש (משויך לקבוצה הפעילה) ---
-        with st.form("blog_form", clear_on_submit=True):
-            post = st.text_area("Share a thought:")
-            if st.form_submit_button("Post") and post:
-                supabase.table("blog").insert({
-                    "user": st.session_state["user_name"], 
-                    "post": post, 
-                    "liked_by": [],
-                    "group_id": active_id  # שיוך הפוסט לקבוצה הנוכחית
-                }).execute()
-                st.rerun()
+        # =========================================================
+        # --- 1. יצירת פוסט חדש (עטוף בכרטיסייה תואמת) ---
+        # =========================================================
+        with st.container(border=True):
+            st.caption("CREATE NEW POST")
+            with st.form("blog_form", clear_on_submit=True):
+                post = st.text_area("Share a thought", placeholder="What's on your mind? Share your progress or thoughts...", label_visibility="collapsed")
+                
+                # כפתור הפרסום מיושר לימין בצורה אלגנטית
+                col_spacer, col_btn = st.columns([4, 1])
+                with col_btn:
+                    submitted = st.form_submit_button("Publish Post", type="primary", use_container_width=True)
+                
+                if submitted and post:
+                    supabase.table("blog").insert({
+                        "user": st.session_state["user_name"], 
+                        "post": post, 
+                        "liked_by": [],
+                        "group_id": active_id
+                    }).execute()
+                    st.rerun()
+
+        st.write("") # רווח בין אזור הפרסום לפיד
 
         # --- שליפת הפוסטים - מסוננים רק לקבוצה הפעילה ---
         posts_resp = supabase.table("blog").select("*").eq("group_id", active_id).order("created_at", desc=True).execute()
         posts = posts_resp.data if posts_resp.data else []
 
-        # --- הצגת הפוסטים ---
-        for p in posts:
-            with st.container(border=True):
-                st.markdown(f"### {p['user']}")
-                st.write(p['post'])
-                
-                if 'created_at' in p:
-                    date_str = p['created_at'].replace('T', ' ').split('.')[0]
-                    st.caption(f"Posted at: {date_str}")
-                
-                cols = st.columns([0.2, 0.4, 0.4])
-                
-                # --- מנגנון לייקים ---
-                liked_by = p.get('liked_by') if p.get('liked_by') is not None else []
-                is_liked = st.session_state["user_name"] in liked_by
-                
-                with cols[0]:
-                    if st.button(f"{'❤️' if is_liked else '🤍'} {len(liked_by)}", key=f"post_like_{p['id']}"):
-                        if is_liked:
-                            liked_by.remove(st.session_state["user_name"])
-                        else:
-                            liked_by.append(st.session_state["user_name"])
-                        supabase.table("blog").update({"liked_by": liked_by}).eq("id", p['id']).execute()
-                        st.rerun()
-                
-                # --- מנגנון תגובות (בתוך Popover) ---
-                with cols[1]:
-                    comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
-                    comments = comments_resp.data if comments_resp.data else []
+        # =========================================================
+        # --- 2. הצגת הפוסטים בפיד ---
+        # =========================================================
+        if posts:
+            for p in posts:
+                with st.container(border=True):
+                    # כותרת פוסט מרווחת ומסודרת
+                    col_user, col_date = st.columns([2, 1])
+                    with col_user:
+                        st.markdown(f"<div style='font-size: 16px; font-weight: 600; color: #E5C07B;'>{p['user']}</div>", unsafe_allow_html=True)
+                    with col_date:
+                        if 'created_at' in p:
+                            date_str = p['created_at'].replace('T', ' ').split('.')[0]
+                            st.markdown(f"<div style='text-align: right; font-size: 12px; color: #8A92A6;'>{date_str}</div>", unsafe_allow_html=True)
                     
-                    with st.popover(f"💬 Comments ({len(comments)})"):
-                        st.subheader("Comments")
-                        if comments:
-                            for c in comments:
-                                st.markdown(f"**{c.get('user')}**: {c.get('comment')}")
-                                if c.get("user") == st.session_state["user_name"]:
-                                    if st.button("🗑️", key=f"c_del_{c['id']}"):
-                                        supabase.table("comments").delete().eq("id", c['id']).execute()
-                                        st.rerun()
+                    # תוכן הפוסט
+                    st.markdown(f"<div style='margin: 15px 0; font-size: 15px; line-height: 1.5;'>{p['post']}</div>", unsafe_allow_html=True)
+                    st.divider()
+                    
+                    # פריסת כפתורי אינטראקציה מותאמת ומאוזנת
+                    cols = st.columns([1.2, 1.5, 1.5, 2])
+                    
+                    # --- מנגנון לייקים ---
+                    liked_by = p.get('liked_by') if p.get('liked_by') is not None else []
+                    is_liked = st.session_state["user_name"] in liked_by
+                    
+                    with cols[0]:
+                        like_label = f"Liked ({len(liked_by)})" if is_liked else f"Like ({len(liked_by)})"
+                        btn_type = "primary" if is_liked else "secondary"
                         
-                        new_comment = st.text_input("Add a comment...", key=f"input_{p['id']}")
-                        if st.button("Send", key=f"btn_{p['id']}"):
-                            if new_comment.strip():
-                                supabase.table("comments").insert({
-                                    "post_id": p['id'], 
-                                    "user": st.session_state["user_name"], 
-                                    "comment": new_comment.strip()
-                                }).execute()
-                                st.rerun()
-
-                # --- מחיקת פוסט ---
-                with cols[2]:
-                    if p["user"] == st.session_state["user_name"]:
-                        if st.button("🗑️ Delete Post", key=f"del_{p['id']}"):
-                            supabase.table("blog").delete().eq("id", p['id']).execute()
+                        if st.button(like_label, key=f"post_like_{p['id']}", type=btn_type, use_container_width=True):
+                            if is_liked:
+                                liked_by.remove(st.session_state["user_name"])
+                            else:
+                                liked_by.append(st.session_state["user_name"])
+                            supabase.table("blog").update({"liked_by": liked_by}).eq("id", p['id']).execute()
                             st.rerun()
+                    
+                    # --- מנגנון תגובות (בתוך Popover) ---
+                    with cols[1]:
+                        comments_resp = supabase.table("comments").select("*").eq("post_id", p['id']).order("created_at").execute()
+                        comments = comments_resp.data if comments_resp.data else []
+                        
+                        with st.popover(f"Comments ({len(comments)})", use_container_width=True):
+                            st.markdown("**DISCUSSION**")
+                            st.divider()
+                            
+                            if comments:
+                                for c in comments:
+                                    col_comm_text, col_comm_del = st.columns([4, 1])
+                                    with col_comm_text:
+                                        st.markdown(f"<div style='font-size: 13px;'><b>{c.get('user')}:</b> {c.get('comment')}</div>", unsafe_allow_html=True)
+                                    with col_comm_del:
+                                        if c.get("user") == st.session_state["user_name"]:
+                                            if st.button("Remove", key=f"c_del_{c['id']}", use_container_width=True):
+                                                supabase.table("comments").delete().eq("id", c['id']).execute()
+                                                st.rerun()
+                                    st.write("") # מרווח קל בין תגובות
+                            else:
+                                st.caption("No comments yet. Be the first to reply.")
+                                
+                            st.write("")
+                            new_comment = st.text_input("Write a comment...", key=f"input_{p['id']}", label_visibility="collapsed", placeholder="Write a reply...")
+                            if st.button("Send Reply", key=f"btn_{p['id']}", use_container_width=True):
+                                if new_comment.strip():
+                                    supabase.table("comments").insert({
+                                        "post_id": p['id'], 
+                                        "user": st.session_state["user_name"], 
+                                        "comment": new_comment.strip()
+                                    }).execute()
+                                    st.rerun()
+
+                    # --- מחיקת פוסט ---
+                    with cols[2]:
+                        if p["user"] == st.session_state["user_name"]:
+                            if st.button("Delete Post", key=f"del_{p['id']}", use_container_width=True):
+                                supabase.table("blog").delete().eq("id", p['id']).execute()
+                                st.rerun()
+        else:
+            st.info("No posts in the feed yet. Start the conversation by sharing a thought above.")
 
 # --- TAB 4: INSIGHTS ---
 with tab4:
