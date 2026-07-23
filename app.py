@@ -586,57 +586,57 @@ with tab1:
             st.info("No app data logged for this date.")
         
         # --- 6. הגרף הקווי (Squad Progress Chart) המשודרג ---
-st.write("")
-st.subheader("SQUAD PROGRESS") 
-st.caption("Screen time trends over time")
+    st.write("")
+    st.subheader("SQUAD PROGRESS") 
+    st.caption("Screen time trends over time")
 
-# 1. הכנת הנתונים הראשונית
-df = pd.DataFrame(filtered_logs)
-df['user'] = df['user'].str.strip()
-df['date'] = pd.to_datetime(df['date'])
-df['total_time'] = df['hours'] + (df['minutes'] / 60)
-df = df.sort_values(by=['user', 'date'])
+    # 1. הכנת הנתונים הראשונית
+    df = pd.DataFrame(filtered_logs)
+    df['user'] = df['user'].str.strip()
+    df['date'] = pd.to_datetime(df['date'])
+    df['total_time'] = df['hours'] + (df['minutes'] / 60)
+    df = df.sort_values(by=['user', 'date'])
 
-# 2. כפתורי בחירת טווח + סינון ה-DataFrame
-time_frame = st.radio(
-    "Select range:",
-    options=["Last 7 Days", "Last 14 Days", "All Time"],
-    horizontal=True,
-    key="squad_progress_range"
-)
+    # 2. כפתורי בחירת טווח + סינון ה-DataFrame
+    time_frame = st.radio(
+        "Select range:",
+        options=["Last 7 Days", "Last 14 Days", "All Time"],
+        horizontal=True,
+        key="squad_progress_range"
+    )
 
-max_date = df['date'].max()
+    max_date = df['date'].max()
 
-if time_frame == "Last 7 Days":
-    df_chart = df[df['date'] >= (max_date - pd.Timedelta(days=6))]
-elif time_frame == "Last 14 Days":
-    df_chart = df[df['date'] >= (max_date - pd.Timedelta(days=13))]
-else:
-    df_chart = df
+    if time_frame == "Last 7 Days":
+        df_chart = df[df['date'] >= (max_date - pd.Timedelta(days=6))]
+    elif time_frame == "Last 14 Days":
+        df_chart = df[df['date'] >= (max_date - pd.Timedelta(days=13))]
+    else:
+        df_chart = df
 
-# 3. יצירת הגרף (שימוש ב-df_chart המסונן)
-fig_line = px.line(
-    df_chart, 
-    x='date', 
-    y='total_time', 
-    color='user', 
-    markers=True,
-    template="plotly_dark"
-)
+    # 3. יצירת הגרף (שימוש ב-df_chart המסונן)
+    fig_line = px.line(
+        df_chart, 
+        x='date', 
+        y='total_time', 
+        color='user', 
+        markers=True,
+        template="plotly_dark"
+    )
 
-# התאמה אישית לרקע הגרף שייטמע ברקע האפליקציה
-fig_line.update_layout(
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(22, 25, 34, 0.5)",
-    margin=dict(l=20, r=20, t=20, b=20),
-    xaxis_title="Date",
-    yaxis_title="Total Hours",
-    legend_title="Squad Members"
-)
-fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
-fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
+    # התאמה אישית לרקע הגרף שייטמע ברקע האפליקציה
+    fig_line.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(22, 25, 34, 0.5)",
+        margin=dict(l=20, r=20, t=20, b=20),
+        xaxis_title="Date",
+        yaxis_title="Total Hours",
+        legend_title="Squad Members"
+    )
+    fig_line.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
+    fig_line.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#222735')
 
-st.plotly_chart(fig_line, use_container_width=True)
+    st.plotly_chart(fig_line, use_container_width=True)
         
 
 def reset_squad_challenges(group_id):
