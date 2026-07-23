@@ -1094,53 +1094,61 @@ with tab4:
         
 # --- TAB 5: PERSONAL GROWTH  ---
 with tab5:
-    st.header("🎯 Personal Challenges & Growth")
-    
-    # טופס הוספת אתגר
-    with st.form("add_personal_challenge", clear_on_submit=True):
-        st.subheader("Add a New Personal Challenge")
-        c_name = st.text_input("What did you achieve today? (e.g., No Instagram for 4 hours)")
-        
-        # מילון רמות קושי עם הניקוד
-        difficulty_map = {
-            "Easy (10 pts)": 10, 
-            "Medium (25 pts)": 25, 
-            "Hard (50 pts)": 50, 
-            "Very Hard (100 pts)": 100
-        }
-        difficulty_choice = st.selectbox("Select Difficulty:", options=list(difficulty_map.keys()))
-        
-        if st.form_submit_button("Log Challenge 🚀"):
-            if c_name:
-                points = difficulty_map[difficulty_choice]
-                today_str = str(datetime.now().date())
-                
-                # הזרקה לסופאבייס לטבלה האישית
-                supabase.table("personal_challenges").insert({
-                    "user": st.session_state["user_name"],
-                    "challenge_name": c_name,
-                    "difficulty": difficulty_choice.split(" ")[0], 
-                    "points": points,
-                    "date": today_str
-                }).execute()
-                
-                st.success(f"Awesome! You earned {points} points.")
-                st.rerun()
-
+    st.subheader("PERSONAL CHALLENGES & GROWTH")
+    st.caption("Log personal milestones, earn points, and track your self-improvement progress")
     st.divider()
+    
+    with st.container(border=True):
+        st.caption("ADD NEW CHALLENGE")
+        with st.form("add_personal_challenge", clear_on_submit=True):
+            c_name = st.text_input(
+                "Achievement Description", 
+                placeholder="e.g., Kept screen time under 3 hours, No Instagram for 4 hours..."
+            )
+            
+            difficulty_map = {
+                "Easy (10 pts)": 10, 
+                "Medium (25 pts)": 25, 
+                "Hard (50 pts)": 50, 
+                "Very Hard (100 pts)": 100
+            }
+            difficulty_choice = st.selectbox("Difficulty Level", options=list(difficulty_map.keys()))
+            
+            col_space, col_btn = st.columns([3, 1])
+            with col_btn:
+                submitted = st.form_submit_button("Log Challenge", type="primary", use_container_width=True)
+            
+            if submitted:
+                if c_name:
+                    points = difficulty_map[difficulty_choice]
+                    today_str = str(datetime.now().date())
+                    
+                    supabase.table("personal_challenges").insert({
+                        "user": st.session_state["user_name"],
+                        "challenge_name": c_name,
+                        "difficulty": difficulty_choice.split(" ")[0], 
+                        "points": points,
+                        "date": today_str
+                    }).execute()
+                    
+                    st.success(f"Challenge logged successfully. Earned {points} points.")
+                    st.rerun()
+
+    st.write("") # רווח
 
     # שליפת הנתונים של המשתמש הנוכחי בלבד מ-Supabase
     my_challenges = supabase.table("personal_challenges").select("*").eq("user", st.session_state["user_name"]).execute().data
     
     if my_challenges:
         df_c = pd.DataFrame(my_challenges)
-        
-        # 1. חישוב סך הכל נקודות אישיות לכל הזמנים
         total_points = df_c['points'].sum()
-        st.metric(label="🏆 My Total Lifetime Points", value=total_points)
+        with st.container(border=True):
+            st.metric(label="Total Lifetime Points", value=f"{total_points:,} pts")
         
-        # 2. גרף השתפרות אישית (נקודות לפי ימים)
-        st.subheader("📈 My Daily Progress")
+        st.write("")
+        
+        st.subheader("DAILY PROGRESS")
+        st.caption("Overview of points earned over time")
         
         daily_points = df_c.groupby('date')['points'].sum().reset_index()
         daily_points = daily_points.sort_values(by='date')
@@ -1150,30 +1158,36 @@ with tab5:
             x="date", 
             y="points", 
             text="points",
-            title="Points Earned Per Day",
-            color_discrete_sequence=["#4CAF50"] 
+            color_discrete_sequence=["#61AFEF"] 
         )
         
         if len(daily_points) == 1:
-            fig_pts.update_traces(width=0.2, textposition='outside')
+            fig_pts.update_traces(width=0.2, textposition='outside', textfont=dict(color='#8A92A6'))
         else:
-            fig_pts.update_traces(textposition='outside')
+            fig_pts.update_traces(textposition='outside', textfont=dict(color='#8A92A6'))
             
         fig_pts.update_layout(
-            xaxis=dict(type='category'),  
-            xaxis_title="", 
-            yaxis_title="Points",
+            xaxis=dict(type='category', title="", showgrid=False, tickfont=dict(color='#8A92A6')),  
+            yaxis=dict(title="Points", showgrid=True, gridcolor='rgba(255,255,255,0.05)', tickfont=dict(color='#8A92A6')),
             plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)"
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=20, r=20, t=30, b=20),
+            font=dict(color="#8A92A6")
         )
-        st.plotly_chart(fig_pts, width= 'stretch')
+        st.plotly_chart(fig_pts, use_container_width=True)
         
-        # 3. היסטוריית אתגרים (טבלה)
-        st.subheader("📜 Challenge History")
+        st.write("")
+        
+        st.subheader("CHALLENGE HISTORY")
+        st.caption("Complete log of completed personal goals")
+        
+        df_display = df_c[['date', 'challenge_name', 'difficulty', 'points']].sort_values(by='date', ascending=False)
+        df_display.columns = ['Date', 'Challenge', 'Difficulty', 'Points']
+        
         st.dataframe(
-            df_c[['date', 'challenge_name', 'difficulty', 'points']].sort_values(by='date', ascending=False),
-            width= 'stretch',
+            df_display,
+            use_container_width=True,
             hide_index=True
         )
     else:
-        st.info("You haven't completed any personal challenges yet. Set a goal and get those points!")
+        st.info("No personal challenges logged yet. Complete a challenge above to start earning points.")
