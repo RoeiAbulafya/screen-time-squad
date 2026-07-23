@@ -84,11 +84,8 @@ def init_supabase():
 
 supabase = init_supabase()
 
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
-
-cookie_manager = get_cookie_manager()
+# --- 1. טעינת מנהל העוגיות באופן ישיר (ללא cache) ---
+cookie_manager = stx.CookieManager()
 
 # שליפת כל העוגיות מהדפדפן
 cookies = cookie_manager.get_all()
