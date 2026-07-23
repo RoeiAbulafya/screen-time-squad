@@ -84,30 +84,48 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- SESSION RESTORE FROM COOKIE ---
-# מנסים לשחזר session קיים מהעוגייה (אם המשתמש כבר התחבר בעבר)
-if "user_name" not in st.session_state:
-    saved_access_token = cookie_manager.get(cookie="sb_access_token")
-    saved_refresh_token = cookie_manager.get(cookie="sb_refresh_token")
-    saved_username = cookie_manager.get(cookie="saved_username")
+@st.cache_resource
+def get_cookie_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_cookie_manager()
+
+# שליפת כל העוגיות מהדפדפן
+cookies = cookie_manager.get_all()
+
+# --- 2. SESSION RESTORE FROM COOKIE ---
+if "user_name" not in st.session_state or not st.session_state["user_name"]:
+    saved_access_token = cookies.get("sb_access_token")
+    saved_refresh_token = cookies.get("sb_refresh_token")
+    saved_username = cookies.get("saved_username")
 
     if saved_access_token and saved_refresh_token and saved_username:
         try:
-            # מנסים לרענן את ה-session עם ה-tokens השמורים
+            # ניסיון שחזור Session קיים
             res = supabase.auth.set_session(saved_access_token, saved_refresh_token)
             if res and res.user:
                 st.session_state["user_name"] = saved_username
                 st.session_state["auth_user"] = res.user
         except Exception:
-            # אם ה-tokens פגו - נאפס ונבקש כניסה מחדש
-            st.session_state["user_name"] = None
-    else:
-        st.session_state["user_name"] = None
+            # אם ה-Access Token פג תוקף - מנסים לחדש בעזרת ה-Refresh Token
+            try:
+                res = supabase.auth.refresh_session(saved_refresh_token)
+                if res and res.user:
+                    st.session_state["user_name"] = saved_username
+                    st.session_state["auth_user"] = res.user
+                    
+                    # עדכון עוגיות חדשות
+                    expire_date = datetime.now() + timedelta(days=30)
+                    cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date, key="ref_acc")
+                    cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date, key="ref_ref")
+            except Exception:
+                st.session_state["user_name"] = None
 
 if "tracked_apps" not in st.session_state:
     st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
 
-# --- LOGIN / SIGNUP PAGE ---
+
+# --- 3. LOGIN / SIGNUP PAGE ---
 if not st.session_state.get("user_name"):
 
     st.title("Welcome to Screen Time Squad!")
@@ -121,7 +139,7 @@ if not st.session_state.get("user_name"):
         with st.form("login_form"):
             login_email = st.text_input("Email")
             login_password = st.text_input("Password", type="password")
-            submitted_login = st.form_submit_button("Sign In 🚀", use_container_width=True)
+            submitted_login = st.form_submit_button("Sign In", type="primary", use_container_width=True)
 
         if submitted_login:
             if not login_email or not login_password:
@@ -133,20 +151,21 @@ if not st.session_state.get("user_name"):
                         "password": login_password
                     })
                     if res and res.user:
-                        # שולפים את שם המשתמש מטבלת profiles
                         profile = supabase.table("profiles").select("username").eq("id", res.user.id).execute().data
                         username = profile[0]["username"] if profile else login_email.split("@")[0]
 
-                        # שמירה ב-session state
+                        # שמירה ב-Session State
                         st.session_state["user_name"] = username
                         st.session_state["auth_user"] = res.user
 
                         # שמירה בעוגיות ל-30 יום
                         expire_date = datetime.now() + timedelta(days=30)
-                        cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date)
-                        cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date)
-                        cookie_manager.set("saved_username", username, expires_at=expire_date)
+                        cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date, key="log_acc")
+                        cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date, key="log_ref")
+                        cookie_manager.set("saved_username", username, expires_at=expire_date, key="log_usr")
 
+                        # קריטי: חצי שנייה המתנה כדי לוודא שדפדפן כותב את העוגיות לפני ה-rerun
+                        time.sleep(0.5)
                         st.rerun()
                 except Exception as e:
                     err = str(e)
@@ -162,7 +181,7 @@ if not st.session_state.get("user_name"):
             signup_email = st.text_input("Email")
             signup_password = st.text_input("Password (min. 6 characters)", type="password")
             signup_confirm = st.text_input("Confirm Password", type="password")
-            submitted_signup = st.form_submit_button("Create Account ", use_container_width=True)
+            submitted_signup = st.form_submit_button("Create Account", type="primary", use_container_width=True)
 
         if submitted_signup:
             if not signup_username or not signup_email or not signup_password:
@@ -173,7 +192,6 @@ if not st.session_state.get("user_name"):
                 st.error("Password must be at least 6 characters.")
             else:
                 try:
-                    # בדיקה שהשם לא תפוס
                     existing = supabase.table("profiles").select("username").eq("username", signup_username.strip()).execute().data
                     if existing:
                         st.error("That display name is already taken. Choose another.")
@@ -183,22 +201,20 @@ if not st.session_state.get("user_name"):
                             "password": signup_password
                         })
                         if res and res.user:
-                            # יצירת פרופיל עם שם תצוגה
                             supabase.table("profiles").insert({
                                 "id": res.user.id,
                                 "username": signup_username.strip()
                             }).execute()
 
-                            # כניסה אוטומטית אחרי הרשמה
                             st.session_state["user_name"] = signup_username.strip()
                             st.session_state["auth_user"] = res.user
 
                             expire_date = datetime.now() + timedelta(days=30)
-                            cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date)
-                            cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date)
-                            cookie_manager.set("saved_username", signup_username.strip(), expires_at=expire_date)
+                            cookie_manager.set("sb_access_token", res.session.access_token, expires_at=expire_date, key="reg_acc")
+                            cookie_manager.set("sb_refresh_token", res.session.refresh_token, expires_at=expire_date, key="reg_ref")
+                            cookie_manager.set("saved_username", signup_username.strip(), expires_at=expire_date, key="reg_usr")
 
-                            st.success(f"Welcome to the squad, {signup_username.strip()}! 🎉")
+                            time.sleep(0.5)
                             st.rerun()
                 except Exception as e:
                     err = str(e)
@@ -209,19 +225,24 @@ if not st.session_state.get("user_name"):
 
     st.stop()
 
-# --- LOGOUT BUTTON (בסיידבר, אחרי הכניסה) ---
+
+# --- LOGOUT FUNCTION ---
 def logout():
     try:
         supabase.auth.sign_out()
     except Exception:
         pass
-    # מחיקת עוגיות
-    cookie_manager.delete("sb_access_token")
-    cookie_manager.delete("sb_refresh_token")
-    cookie_manager.delete("saved_username")
+    
+    # מחיקת עוגיות עם מפתחות ייחודיים
+    cookie_manager.delete("sb_access_token", key="del_acc")
+    cookie_manager.delete("sb_refresh_token", key="del_ref")
+    cookie_manager.delete("saved_username", key="del_usr")
+    
     # איפוס session state
     for key in ["user_name", "auth_user", "active_group_id", "tracked_apps"]:
         st.session_state.pop(key, None)
+        
+    time.sleep(0.5)
     st.rerun()
 
 # --- TOP BAR ---
@@ -279,7 +300,7 @@ if user_groups_data:
     }
         
 with st.sidebar:
-    st.markdown("<h3 style='margin-bottom: 2px;'>MY SQUADS</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-bottom: 2px;'>SQUADS MANAGEMENT</h3>", unsafe_allow_html=True)
     current_user = st.session_state.get("user_name", "")
     st.caption(f"Logged in as **{current_user}**")
     
