@@ -374,9 +374,9 @@ if not st.session_state.get("user_name"):
             else:
                 try:
                     supabase.auth.reset_password_for_email(
-                        reset_email.strip(),
-                        redirect_to="https://screen-time-squad.streamlit.app"
-                    )
+                    reset_email.strip(),
+                    options={"redirect_to": "https://screen-time-squad.streamlit.app"}
+)
                     st.success("If an account with this email exists, a password reset link has been sent to your inbox.")
                 except Exception as e:
                     st.error(f"Failed to send reset link: {e}")
