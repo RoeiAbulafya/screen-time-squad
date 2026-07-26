@@ -3,7 +3,6 @@ import string
 import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-
 import extra_streamlit_components as stx
 import pandas as pd
 import plotly.express as px
@@ -144,6 +143,7 @@ if "tracked_apps" not in st.session_state:
 
 
 # --- 6. LOGIN / SIGNUP PAGE ---
+# --- 6. LOGIN / SIGNUP PAGE ---
 if not st.session_state.get("user_name"):
 
     st.title("Welcome to Screen Time Squad!")
@@ -153,7 +153,8 @@ if not st.session_state.get("user_name"):
     )
     st.divider()
 
-    tab_login, tab_signup = st.tabs(["Sign In", "Create Account"])
+    # הוספנו לשונית שלישית: "Forgot Password"
+    tab_login, tab_signup, tab_reset = st.tabs(["Sign In", "Create Account", "Forgot Password"])
 
     # ---- כניסה ----
     with tab_login:
@@ -310,6 +311,27 @@ if not st.session_state.get("user_name"):
                         )
                     else:
                         st.error(f"Sign up failed: {err}")
+
+    # ---- איפוס סיסמה (חדש!) ----
+    with tab_reset:
+        st.subheader("Reset Your Password")
+        st.caption("Enter your email address and we'll send you a link to reset your password.")
+        
+        with st.form("reset_password_form"):
+            reset_email = st.text_input("Registered Email")
+            submitted_reset = st.form_submit_button(
+                "Send Reset Link", type="primary", use_container_width=True
+            )
+
+        if submitted_reset:
+            if not reset_email:
+                st.error("Please enter your email address.")
+            else:
+                try:
+                    supabase.auth.reset_password_for_email(reset_email.strip())
+                    st.success("If an account with this email exists, a password reset link has been sent to your inbox.")
+                except Exception as e:
+                    st.error(f"Failed to send reset link: {e}")
 
     st.stop()
 
