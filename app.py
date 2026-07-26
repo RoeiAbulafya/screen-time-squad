@@ -141,9 +141,54 @@ if "user_name" not in st.session_state or not st.session_state["user_name"]:
 if "tracked_apps" not in st.session_state:
     st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
 
+# --- 6. LOGIN / SIGNUP PAGE/forgot password ---
+query_params = st.query_params
+auth_code = query_params.get("code")
 
-# --- 6. LOGIN / SIGNUP PAGE ---
-# --- 6. LOGIN / SIGNUP PAGE ---
+if auth_code or st.session_state.get("in_password_reset"):
+    st.session_state["in_password_reset"] = True
+
+    if auth_code and "auth_user" not in st.session_state:
+        try:
+            res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
+            if res and res.user:
+                st.session_state["auth_user"] = res.user
+        except Exception as e:
+            st.error("Reset link is invalid or has expired.")
+            st.query_params.clear()
+            st.session_state.pop("in_password_reset", None)
+
+    if st.session_state.get("in_password_reset"):
+        st.title("Set New Password")
+        st.caption("Please enter your new password below.")
+        
+        with st.form("set_new_password_form"):
+            new_password = st.text_input("New Password", type="password")
+            confirm_password = st.text_input("Confirm New Password", type="password")
+            submit_new_pw = st.form_submit_button("Update Password", type="primary", use_container_width=True)
+
+        if submit_new_pw:
+            if not new_password or not confirm_password:
+                st.error("Please fill in all fields.")
+            elif new_password != confirm_password:
+                st.error("Passwords don't match.")
+            elif len(new_password) < 6:
+                st.error("Password must be at least 6 characters.")
+            else:
+                try:
+                    supabase.auth.update_user({"password": new_password})
+                    st.success("Password updated successfully! Redirecting to sign in...")
+                    
+                    st.query_params.clear()
+                    st.session_state.pop("in_password_reset", None)
+                    supabase.auth.sign_out()
+                    
+                    time.sleep(2)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to update password: {e}")
+
+        st.stop()
 if not st.session_state.get("user_name"):
 
     st.title("Welcome to Screen Time Squad!")
