@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import extra_streamlit_components as stx
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -141,16 +142,44 @@ if "user_name" not in st.session_state or not st.session_state["user_name"]:
 if "tracked_apps" not in st.session_state:
     st.session_state["tracked_apps"] = ["Instagram", "YouTube", "Facebook"]
 
-# --- 6. LOGIN / SIGNUP PAGE/forgot password ---
-query_params = st.query_params
-auth_code = query_params.get("code")
+# --- 6. LOGIN / SIGNUP / PASSWORD RESET PAGE ---
+# 1. גשר JavaScript להמרת פרמטרים מ-# (Hash) ל-? (Query Params) עבור Streamlit
+components.html(
+    """
+    <script>
+    const hash = window.parent.location.hash.substring(1);
+    if (hash && hash.includes("access_token") && hash.includes("type=recovery")) {
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        
+        if (accessToken && refreshToken) {
+            // העברת הפרמטרים מהסולמית לסימן שאלה כדי שפייתון יוכל לקרוא אותם
+            window.parent.location.href = window.parent.location.pathname + 
+                "?access_token=" + encodeURIComponent(accessToken) + 
+                "&refresh_token=" + encodeURIComponent(refreshToken) + 
+                "&type=recovery";
+        }
+    }
+    </script>
+    """,
+    height=0,
+)
 
-if auth_code or st.session_state.get("in_password_reset"):
+# 2. קריאת הפרמטרים מתוך ה-URL
+query_params = st.query_params
+access_token = query_params.get("access_token")
+refresh_token = query_params.get("refresh_token")
+req_type = query_params.get("type")
+
+# 3. אם התקבל טוקן איפוס מסוג recovery
+if (access_token and refresh_token and req_type == "recovery") or st.session_state.get("in_password_reset"):
     st.session_state["in_password_reset"] = True
 
-    if auth_code and "auth_user" not in st.session_state:
+    # חיבור הסשן של המשתמש ב-Supabase באמצעות הטוקנים שנתקבלו מהמייל
+    if access_token and refresh_token and "auth_user" not in st.session_state:
         try:
-            res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
+            res = supabase.auth.set_session(access_token, refresh_token)
             if res and res.user:
                 st.session_state["auth_user"] = res.user
         except Exception as e:
@@ -158,6 +187,7 @@ if auth_code or st.session_state.get("in_password_reset"):
             st.query_params.clear()
             st.session_state.pop("in_password_reset", None)
 
+    # הצגת מסך איפוס הסיסמה
     if st.session_state.get("in_password_reset"):
         st.title("Set New Password")
         st.caption("Please enter your new password below.")
@@ -176,9 +206,11 @@ if auth_code or st.session_state.get("in_password_reset"):
                 st.error("Password must be at least 6 characters.")
             else:
                 try:
+                    # עדכון הסיסמה ב-Supabase
                     supabase.auth.update_user({"password": new_password})
                     st.success("Password updated successfully! Redirecting to sign in...")
                     
+                    # ניקוי ה-URL והסשן הזמני
                     st.query_params.clear()
                     st.session_state.pop("in_password_reset", None)
                     supabase.auth.sign_out()
@@ -188,7 +220,11 @@ if auth_code or st.session_state.get("in_password_reset"):
                 except Exception as e:
                     st.error(f"Failed to update password: {e}")
 
+        # עצירת הרצת האפליקציה כדי שהמשתמש יראה רק את מסך קביעת הסיסמה
         st.stop()
+
+
+# 4. המסך הרגיל של התחברות / הרשמה / שכחתי סיסמה
 if not st.session_state.get("user_name"):
 
     st.title("Welcome to Screen Time Squad!")
@@ -198,7 +234,6 @@ if not st.session_state.get("user_name"):
     )
     st.divider()
 
-    # הוספנו לשונית שלישית: "Forgot Password"
     tab_login, tab_signup, tab_reset = st.tabs(["Sign In", "Create Account", "Forgot Password"])
 
     # ---- כניסה ----
@@ -357,7 +392,7 @@ if not st.session_state.get("user_name"):
                     else:
                         st.error(f"Sign up failed: {err}")
 
-    # ---- איפוס סיסמה (חדש!) ----
+    # ---- איפוס סיסמה ----
     with tab_reset:
         st.subheader("Reset Your Password")
         st.caption("Enter your email address and we'll send you a link to reset your password.")
@@ -374,15 +409,14 @@ if not st.session_state.get("user_name"):
             else:
                 try:
                     supabase.auth.reset_password_for_email(
-                    reset_email.strip(),
-                    options={"redirect_to": "https://screen-time-squad.streamlit.app"}
-)
+                        reset_email.strip(),
+                        {"redirect_to": "https://screen-time-squad.streamlit.app"}
+                    )
                     st.success("If an account with this email exists, a password reset link has been sent to your inbox.")
                 except Exception as e:
                     st.error(f"Failed to send reset link: {e}")
 
     st.stop()
-
 
 # --- LOGOUT FUNCTION ---
 def logout():
